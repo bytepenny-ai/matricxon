@@ -38,7 +38,7 @@ if [[ "$PROJECT_DIR" != /opt/* ]]; then
     warn "matricxon is in $PROJECT_DIR. On a server it belongs in /opt/matricxon, outside anyone's home folder."
     info "To install it there instead (an admin with sudo runs the first line):"
     info "  sudo mkdir -p /opt/matricxon && sudo chown $me: /opt/matricxon"
-    info "  git clone https://github.com/upupabit/matricxon.git /opt/matricxon   (or copy this folder there)"
+    info "  git clone https://github.com/bytepenny-ai/matricxon.git /opt/matricxon   (or copy this folder there)"
     info "  cd /opt/matricxon && scripts/install.sh"
     ask_continue "Install here in $PROJECT_DIR anyway?"
 fi
