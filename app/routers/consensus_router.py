@@ -122,7 +122,9 @@ def remove_voter(
     return VoterResult(ok=runtime.remove_voter(node_id, leave=leave))
 
 
-@router.post("/api/consensus/reach", response_model=ReachResult)
+@router.post(
+    "/api/consensus/reach", dependencies=[Depends(require_admin)], response_model=ReachResult
+)
 def can_reach(change: ReachRequest) -> ReachResult:
     """Whether THIS node can reach `address`: a new node must be reachable at its advertised address
     (pAIring's 127.0.0.1 can mean something else in a container)."""

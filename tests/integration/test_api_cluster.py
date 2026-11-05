@@ -69,3 +69,12 @@ def test_a_node_says_whether_it_can_reach_an_address(client, monkeypatch):
         client.post("/api/consensus/reach", json={"address": "ftp://x"}).json()["reachable"]
         is False
     )
+
+
+def test_reach_needs_the_admin_secret_when_one_is_set(client, monkeypatch):
+    """Otherwise anyone could make the node fetch any address (server-side request forgery)."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "admin_secret", "s3cret")
+    response = client.post("/api/consensus/reach", json={"address": "http://169.254.169.254"})
+    assert response.status_code == 401
