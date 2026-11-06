@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -24,6 +25,11 @@ class StoredEntry:
     saved_at: float
     tag: str = ""
     size: int = 0
+
+    def describe(self) -> str:
+        """For the log: the chat's short tag, its length and when it was saved."""
+        saved = time.strftime("%Y-%m-%d %H:%M", time.localtime(self.saved_at))
+        return f"{self.tag[:8] or 'untagged'} ({self.length} tokens, saved {saved})"
 
     def meta_json(self) -> bytes:
         return json.dumps({k: v for k, v in asdict(self).items() if k != "size"}).encode()
@@ -60,7 +66,7 @@ class CacheFilesBase:
     def _rescan_if_due(self) -> None:
         raise NotImplementedError
 
-    def _remove(self, name: str, path: Path | None = None) -> None:
+    def _remove(self, name: str, path: Path | None = None, reason: str | None = None) -> None:
         raise NotImplementedError
 
     def enforce_limits(self) -> None:

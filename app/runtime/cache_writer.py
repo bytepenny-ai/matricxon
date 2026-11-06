@@ -98,7 +98,7 @@ class CacheWriter(CacheFilesBase):
             gone = tag in self._forgotten
             superseded = SupersededCopies.find(name, entry, list(self._index.items()))
         if gone:
-            self._remove(name)
+            self._remove(name, reason="its chat was deleted while it was being saved")
         for old in superseded:
-            self._remove(old)
+            self._remove(old, reason="replaced by a newer copy of the same chat")
         self.enforce_limits()

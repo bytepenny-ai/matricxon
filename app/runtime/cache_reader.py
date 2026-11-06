@@ -95,8 +95,7 @@ class CacheReader(CacheFilesBase):
                 meta = handle.read(meta_len)
                 body = self._cipher.open(handle.read(), MAGIC + meta)
         except (CacheDecryptError, OSError, struct.error):
-            logger.warning("prompt-cache file %s unreadable, dropping it", name)
-            self._remove(name, path)
+            self._remove(name, path, reason="unreadable (wrong key or damaged)")
             return None
         self._remove(name, path)
         return body

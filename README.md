@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/FastAPI-async-009688" alt="FastAPI">
   <img src="https://img.shields.io/badge/self--hosted-yes-purple" alt="Self-hosted">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License">
+  <a href="https://www.bestpractices.dev/projects/16367"><img src="https://img.shields.io/cii/level/16367?label=OpenSSF%20Best%20Practices&color=3b5bdb" alt="OpenSSF Best Practices"></a>
   <img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch&logoColor=white" alt="PyTorch">
   <img src="https://img.shields.io/badge/models-GGUF-7C3AED" alt="GGUF">
   <img src="https://img.shields.io/badge/quantization-25_types-8B5CF6" alt="Quantization">

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.runtime.cache_crypto import CacheCipher, CacheDecryptError
 from app.runtime.cache_files import MAGIC, SUFFIX, StoredEntry
+from app.runtime.cache_limits import CacheLimits
 from app.runtime.cache_policy import PersistencePolicy
 from app.runtime.cache_reader import CacheReader
 from app.runtime.cache_superseded import SupersededCopies
@@ -23,10 +24,10 @@ BLOCK_TOKENS = 64
 __all__ = ["BLOCK_TOKENS", "MAGIC", "SUFFIX", "PersistentCacheStore", "StoredEntry"]
 
 
-class PersistentCacheStore(CacheWriter, CacheReader):
+class PersistentCacheStore(CacheWriter, CacheReader, CacheLimits):
     """Encrypted, size- and age-limited prompt-cache files on disk: the tier below the RAM pool.
-    Writing is in cache_writer.py, restoring in cache_reader.py; this class owns the directory
-    index, the limits and the admin actions.
+    Writing is in cache_writer.py, restoring in cache_reader.py, the limits and admin removals in
+    cache_limits.py; this class owns the directory index.
 
     A slot is written when the pool evicts it, when its model unloads and on shutdown, never during
     a reply. File layout: `MAGIC | len | sealed meta | sealed body`, both AES-256-GCM sealed (body
@@ -110,10 +111,16 @@ class PersistentCacheStore(CacheWriter, CacheReader):
     def _scan(self, deadline: float | None = None) -> bool:
         """Startup: drops this node's own leftovers (other nodes' are theirs) and indexes. False
         when `deadline` came first."""
-        for path in self._dir.glob(f"{self._node_id}-*.tmp"):
+        leftovers = [
+            *self._dir.glob(f"{self._node_id}-*.tmp"),
+            *self._dir.glob(f"*{self._claim_suffix}"),
+        ]
+        for path in leftovers:
             path.unlink(missing_ok=True)
-        for path in self._dir.glob(f"*{self._claim_suffix}"):
-            path.unlink(missing_ok=True)
+        if leftovers:
+            logger.info(
+                "prompt cache: removed %d unfinished file(s) left by an earlier run", len(leftovers)
+            )
         return self._refresh(drop_unreadable=True, deadline=deadline)
 
     def _refresh(self, drop_unreadable: bool = False, deadline: float | None = None) -> bool:
@@ -125,7 +132,14 @@ class PersistentCacheStore(CacheWriter, CacheReader):
             known = set(self._index)
         for name in known - on_disk.keys():
             with self._lock:
-                self._index.pop(name, None)
+                entry = self._index.pop(name, None)
+            if entry is not None:
+                # Not removed here: another node took it, or something outside Matricxon deleted it.
+                logger.info(
+                    "prompt cache: saved chat %s disappeared from the folder "
+                    "(taken by another node, or deleted outside Matricxon)",
+                    entry.describe(),
+                )
         for name, path in on_disk.items():
             if name in known or name in self._rejected:
                 continue
@@ -137,7 +151,9 @@ class PersistentCacheStore(CacheWriter, CacheReader):
                 continue
             except (CacheDecryptError, OSError, ValueError, KeyError, TypeError):
                 if drop_unreadable:
-                    logger.warning("dropping unreadable prompt-cache file %s", name)
+                    logger.warning(
+                        "prompt cache: removed file %s - unreadable (wrong key or damaged)", name
+                    )
                     path.unlink(missing_ok=True)
                 else:
                     self._rejected.add(name)
@@ -164,55 +180,6 @@ class PersistentCacheStore(CacheWriter, CacheReader):
             (meta_len,) = struct.unpack(">I", handle.read(4))
             meta = json.loads(self._cipher.open(handle.read(meta_len), MAGIC))
         return StoredEntry(**meta, size=path.stat().st_size)
-
-    # limits and admin
-
-    def _remove(self, name: str, path: Path | None = None) -> None:
-        with self._lock:
-            self._index.pop(name, None)
-        (path or self._dir / name).unlink(missing_ok=True)
-
-    def enforce_limits(self) -> None:
-        """Drops files past the TTL, then the oldest until the total is within budget (only on the
-        node owning the cleanup job)."""
-        if not self.may_clean():
-            return
-        with self._lock:
-            now = time.time()
-            doomed = [
-                n for n, e in self._index.items() if now - e.saved_at > self.policy.ttl_seconds
-            ]
-            keep = sorted(
-                ((n, e) for n, e in self._index.items() if n not in doomed),
-                key=lambda item: item[1].saved_at,
-            )
-            total = sum(e.size for _, e in keep)
-            while keep and total > self.policy.budget_bytes:
-                name, entry = keep.pop(0)
-                doomed.append(name)
-                total -= entry.size
-        for name in doomed:
-            self._remove(name)
-
-    def forget(self, tag: str) -> int:
-        """Deletes every stored file of the chat `tag` (and refuses its later spills); returns how
-        many files went."""
-        if not tag:
-            return 0
-        self._refresh()
-        with self._lock:
-            self._forgotten.add(tag)
-            names = [n for n, e in self._index.items() if e.tag == tag]
-        for name in names:
-            self._remove(name)
-        return len(names)
-
-    def clear(self) -> None:
-        self._refresh()
-        with self._lock:
-            names = list(self._index)
-        for name in names:
-            self._remove(name)
 
     def chat_count(self) -> int:
         """Distinct chats with a saved copy (one chat can have several files, e.g. branches)."""
