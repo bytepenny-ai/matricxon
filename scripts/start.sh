@@ -11,6 +11,19 @@ err() { printf '%sERROR:%s %s\n' "$R" "$N" "$*"; }
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
+# Not as root: the logs, kernels and caches it writes would then belong to root, and its own user could no longer
+# write them. MATRICXON_ALLOW_ROOT=1 for a container that runs everything as root.
+if [ "$(id -u)" -eq 0 ] && [ "${MATRICXON_ALLOW_ROOT:-}" != 1 ]; then
+    OWNER="$(stat -c %U "$PROJECT_DIR" 2>/dev/null || stat -f %Su "$PROJECT_DIR")"
+    err "matricxon must not run as root."
+    if [ "$OWNER" != root ]; then
+        info "Start it as the user this folder belongs to ($OWNER):  su - $OWNER -c '$PROJECT_DIR/scripts/start.sh'"
+    else
+        info "Give this folder to a normal user (chown -R <user>: $PROJECT_DIR), then start it as that user."
+    fi
+    exit 1
+fi
+
 HOST="${MATRICXON_HOST:-0.0.0.0}"
 PORT="${MATRICXON_PORT:-8420}"
 PID_FILE="run/matricxon.pid"

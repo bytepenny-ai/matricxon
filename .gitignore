@@ -1,0 +1,21 @@
+.venv/
+.venv-bench/
+app/native/build/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+data/
+# Exception to the bare "data/" rule above: these are checked-in, extracted-verbatim GGML
+# codebook/grid tables (see scripts/extract_iq_grids.py) the IQ1/IQ2/IQ3 dequant strategies
+# actually load at runtime - real source data, not a scratch/models directory.
+!/app/gguf/dequant/data/
+!/app/gguf/dequant/data/**
+*.gguf
+*.partial
+run/
+logs/
+.env
+
+# Local Claude Code config: machine-specific, not project source.
+.claude/

@@ -5,6 +5,8 @@ https://bytepenny.com/rss/
 
 ## Unreleased
 
+- `scripts/start.sh` refuses to run as root with a clear message naming the user to start it as (`MATRICXON_ALLOW_ROOT=1` for containers).
+- The repository now ships its `.gitignore`: a clone no longer lists `.env`, caches and data as new files.
 - **Security:** vulnerability reporting policy (SECURITY.md), CodeQL code scanning and Dependabot updates.
 - Updated dependencies, including FastAPI 0.162 and Pydantic 2.14.
 - `/api/version` reports the git commit next to the version.
