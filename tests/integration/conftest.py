@@ -4,11 +4,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import get_model_catalog, get_model_manager
+from app.cluster.provisioning import EnvFile
+from app.dependencies import get_env_file, get_model_catalog, get_model_manager, get_model_pins
 from app.main import MatricxonApp
 from app.models.catalog import ModelCatalog
 from app.models.installed_model import InstalledModel
+from app.models.load_limit import LoadLimit
 from app.models.manager import ModelManager
+from app.models.pins import ModelPins
 from tests.tiny_gguf import build_tiny_mistral3_gguf
 from tests.tiny_gguf_bert import build_tiny_bert_gguf
 from tests.tiny_gguf_command_r import build_tiny_command_r_gguf
@@ -97,6 +100,12 @@ def client(models_dir: Path, model_manager: ModelManager) -> TestClient:
     # (un-overridden) get_model_catalog, which it calls directly, not through FastAPI's DI;
     # overriding the catalog above wouldn't reach it without this too.
     app.dependency_overrides[get_model_manager] = lambda: model_manager
+    # The same for the pins (built around get_model_manager) and the .env they are saved in.
+    catalog = ModelCatalog(models_dir)
+    installed = lambda: {m.tag: m.size_bytes for m in catalog.list_installed()}  # noqa: E731
+    pins = ModelPins(model_manager, LoadLimit(catalog), installed)
+    app.dependency_overrides[get_model_pins] = lambda: pins
+    app.dependency_overrides[get_env_file] = lambda: EnvFile(models_dir.parent / ".env")
     return TestClient(app)
 
 

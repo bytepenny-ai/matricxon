@@ -7,6 +7,7 @@ from app.models.manager import ModelManager
 from app.schemas.ps import PsEntry, PsResponse
 
 router = APIRouter()
+_PINNED_DAYS = 36_500  # a pinned model's expires_at: in a hundred years
 
 
 class PsRequestHandler:
@@ -16,12 +17,18 @@ class PsRequestHandler:
     def handle(self) -> PsResponse:
         clock_now = self._model_manager.now()
         wall_now = datetime.now(UTC)
+        never = wall_now + timedelta(days=_PINNED_DAYS)
         entries = [
             PsEntry(
                 name=handle.tag,
                 size=handle.size_bytes,
-                size_vram=handle.size_bytes if self._model_manager.on_gpu else 0,
-                expires_at=(wall_now + timedelta(seconds=handle.expires_in(clock_now))).isoformat(),
+                size_vram=handle.size_bytes if handle.on_gpu else 0,
+                expires_at=(
+                    never
+                    if handle.pinned
+                    else wall_now + timedelta(seconds=handle.expires_in(clock_now))
+                ).isoformat(),
+                pinned=handle.pinned,
             )
             for handle in self._model_manager.list_loaded()
         ]

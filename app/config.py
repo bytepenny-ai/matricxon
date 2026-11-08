@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.models.load_dtype import MEMORY_SAFETY_MARGIN
 
 # A software version, not an env-overridable knob; GET /api/version reads it.
-MATRICXON_VERSION = "2.1"  # the git tag; keep in step when tagging a release
+MATRICXON_VERSION = "2.1.1"  # the git tag; keep in step when tagging a release
 
 
 class Settings(BaseSettings):
@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     # and a model asked for in the vision role, don't count (app.models.load_limit). Raising it is
     # safe with enough RAM: a load that clearly won't fit fails with InsufficientMemoryError.
     max_loaded_models: int = 2
+    # Models kept loaded (MATRICXON_PINNED_MODELS, tags separated by commas): loaded in the
+    # background after start, never unloaded for being idle or to make room (app.models.pins).
+    # Pinned chat models count toward max_loaded_models. Changed live by PUT /api/runtime-settings.
+    pinned_models: str = ""
     # Headroom required beyond a model's exact bf16 weight size before a load
     # (ModelManager._ensure_enough_memory_to_load/select_load_dtype). Default 1.2x. Bounded 1.1-1.8:
     # lower

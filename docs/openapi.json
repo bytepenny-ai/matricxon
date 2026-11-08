@@ -1138,6 +1138,29 @@
         "title": "GenerateRequest",
         "type": "object"
       },
+      "GpuMemory": {
+        "properties": {
+          "free_bytes": {
+            "title": "Free Bytes",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "total_bytes": {
+            "title": "Total Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "total_bytes",
+          "free_bytes"
+        ],
+        "title": "GpuMemory",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1395,9 +1418,39 @@
             "title": "Active",
             "type": "integer"
           },
+          "counted": {
+            "default": true,
+            "title": "Counted",
+            "type": "boolean"
+          },
+          "expires_in_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Seconds"
+          },
+          "memory": {
+            "default": "ram",
+            "enum": [
+              "ram",
+              "vram"
+            ],
+            "title": "Memory",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "pinned": {
+            "default": false,
+            "title": "Pinned",
+            "type": "boolean"
           },
           "size_bytes": {
             "title": "Size Bytes",
@@ -1452,6 +1505,21 @@
             ],
             "title": "Free Memory Bytes"
           },
+          "gpu": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GpuMemory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_loaded_models": {
+            "default": 0,
+            "title": "Max Loaded Models",
+            "type": "integer"
+          },
           "models": {
             "items": {
               "$ref": "#/components/schemas/LoadedModelLoad"
@@ -1463,9 +1531,37 @@
             "title": "Node Kind",
             "type": "string"
           },
+          "pins": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PinStatus"
+            },
+            "title": "Pins",
+            "type": "array"
+          },
+          "runs_on": {
+            "default": "cpu",
+            "enum": [
+              "cpu",
+              "gpu"
+            ],
+            "title": "Runs On",
+            "type": "string"
+          },
           "threads": {
             "title": "Threads",
             "type": "integer"
+          },
+          "total_memory_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Memory Bytes"
           }
         },
         "required": [
@@ -1974,6 +2070,57 @@
         "title": "OpenAIModelList",
         "type": "object"
       },
+      "PinStatus": {
+        "description": "One pin (app.models.pins): only `loaded` counts as pinned for routing.",
+        "properties": {
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "memory": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "ram",
+              "vram"
+            ],
+            "title": "Memory",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "loading",
+              "loaded",
+              "failed",
+              "unloaded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "state",
+          "attempt"
+        ],
+        "title": "PinStatus",
+        "type": "object"
+      },
       "ProvisionBody": {
         "properties": {
           "admin_secret": {
@@ -2083,6 +2230,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "pinned": {
+            "default": false,
+            "title": "Pinned",
+            "type": "boolean"
           },
           "size": {
             "title": "Size",
@@ -2543,6 +2695,21 @@
               }
             ],
             "title": "Memory Safety Margin"
+          },
+          "pinned_models": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned Models"
           },
           "prompt_cache_budget_mb": {
             "anyOf": [
@@ -3027,7 +3194,7 @@
   "info": {
     "description": "Matricxon's HTTP API: Ollama-style routes under /api, OpenAI-compatible routes under /v1, and Prometheus metrics at /metrics. Errors answer as `{\"error\": <message>, \"code\": <stable code>}` (OpenAI's error shape on /v1).",
     "title": "Matricxon",
-    "version": "2.1"
+    "version": "2.1.1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -4147,7 +4314,7 @@
     },
     "/api/runtime-settings": {
       "put": {
-        "description": "Changes settings without a restart; signed like the other admin routes.",
+        "description": "Changes settings without a restart; signed like the other admin routes. A pin list this node\ncan't take (too many chat models, not installed) is refused with 409 and nothing changes.",
         "operationId": "put_runtime_settings_api_runtime_settings_put",
         "requestBody": {
           "content": {

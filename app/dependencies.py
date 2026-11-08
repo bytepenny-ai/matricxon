@@ -17,10 +17,15 @@ from app.config import settings
 from app.consensus.factory import ConsensusFactory
 from app.consensus.runtime import ConsensusRuntime
 from app.models.catalog import ModelCatalog
+from app.models.load_limit import LoadLimit
 from app.models.manager import ModelManager
+from app.models.pins import ModelPins, parse_pins
+from app.models.placement import ModelPlacement
 from app.runtime.cache_crypto import CacheKeyStore
 from app.runtime.cache_policy import PersistencePolicy
 from app.runtime.cache_store import PersistentCacheStore
+from app.runtime.compute_device import ComputeDevice
+from app.runtime.memory_info import MemoryInfo
 from app.storage.node_identity import NodeIdentity
 from app.storage.paths import StoragePaths
 from app.update.self_update import SelfUpdater
@@ -99,6 +104,36 @@ def get_model_manager() -> ModelManager:
         device=settings.device,
         gpu_weight_mode=settings.gpu_weight_mode,
     )
+
+
+@lru_cache
+def get_model_pins() -> ModelPins:
+    """MATRICXON_PINNED_MODELS; started by the app at boot (never on a voter-only node)."""
+    catalog = get_model_catalog()
+    return ModelPins(
+        get_model_manager(),
+        LoadLimit(catalog),
+        installed=lambda: {m.tag: m.size_bytes for m in catalog.list_installed()},
+        tags=parse_pins(settings.pinned_models),
+        placement=get_placement(),
+        voter_only=settings.node_kind == "voter",
+    )
+
+
+@lru_cache
+def get_placement() -> ModelPlacement:
+    """Which GPU this server has, for pins and reports (the loader keeps its own, the same)."""
+    return ModelPlacement(ComputeDevice.resolve(settings.device))
+
+
+@lru_cache
+def get_memory_info() -> MemoryInfo:
+    return MemoryInfo(get_placement())
+
+
+def get_env_file() -> EnvFile:
+    """The node's .env, kept in step with the process environment (EnvFile)."""
+    return _env_file()
 
 
 @lru_cache

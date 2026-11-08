@@ -3,8 +3,10 @@
 Notable changes in each Matricxon release. Security fixes are marked **Security**. Full release notes and news:
 https://bytepenny.com/rss/
 
-## Unreleased
+## 2.1.1 (2026-11-08)
 
+- Pinned models (`MATRICXON_PINNED_MODELS`): loaded in the background after start and never unloaded for being idle or to make room. A pin that can't load is tried 3 times, a minute apart, then its memory is used as usual. Each pin can choose RAM, GPU VRAM or auto (`tag|ram`, `tag|vram`), also on a server that otherwise runs on the CPU or the GPU. Set live with `PUT /api/runtime-settings` (`pinned_models`, saved in `.env`); `/api/node/load` and `/api/ps` report pins and their state. Deleting a model removes its pin; a pin whose model is gone fails at once instead of retrying.
+- `/api/node/load` also reports total RAM, the GPU's memory and the model limit.
 - `scripts/start.sh` refuses to run as root with a clear message naming the user to start it as (`MATRICXON_ALLOW_ROOT=1` for containers).
 - The repository now ships its `.gitignore`: a clone no longer lists `.env`, caches and data as new files.
 - **Security:** vulnerability reporting policy (SECURITY.md), CodeQL code scanning and Dependabot updates.

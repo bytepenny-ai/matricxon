@@ -18,6 +18,7 @@ from app.dependencies import (
     get_join_token,
     get_model_catalog,
     get_model_manager,
+    get_model_pins,
     get_shared_settings,
     get_storage_paths,
 )
@@ -120,9 +121,8 @@ class MatricxonApp:
 
         # PyTorch's thread-count heuristic under-detects (measured: 2 threads on a 4-core machine,
         # leaving half the CPU idle in every matmul of the hot path); explicit beats implicit. See
-        # Settings.torch_threads; irrelevant on a non-CPU device.
-        if settings.device == "cpu":
-            torch.set_num_threads(CpuCores.threads(settings.torch_threads))
+        # Settings.torch_threads. Also on a GPU server: a model pinned to RAM runs on the CPU there.
+        torch.set_num_threads(CpuCores.threads(settings.torch_threads))
         # The target hardware (Sandy Bridge) lacks the instruction set NNPACK needs
         # (torch.backends.nnpack.is_available is False, like cpu_accelerates_bf16's
         # avx512_bf16/amx_bf16 check). By default every Conv1d (nemotron_h's SSM causal conv,
@@ -154,9 +154,13 @@ class MatricxonApp:
         if settings.cluster_role != "off" and self._pid_file.previous_run_died():
             ClusterEvents.previous_run_crashed()
         self._pid_file.write()
+        pins = get_model_pins()
+        if settings.node_kind != "voter":  # a voter-only node never loads models
+            pins.start()  # in the background: the server answers meanwhile
         try:
             yield
         finally:
+            pins.stop()
             if shared is not None:
                 shared.stop()
             if consensus is not None:

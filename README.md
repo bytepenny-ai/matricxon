@@ -123,6 +123,13 @@ raw integer types, which fail with a clear error.
   reranker lists only the `rerank` capability and can't be used for chat. pAIring uses it to pick
   the best Knowledge base passages.
 - **Safe memory use.** A model that would not fit in free RAM (with a safety margin) is refused. Idle models unload after a keep-alive time.
+- **Pinned models.** `MATRICXON_PINNED_MODELS` keeps chosen models loaded: they load in the background
+  right after start (smallest first, while the server already answers) and are never unloaded for
+  being idle or to make room. Each pin can choose CPU RAM, GPU VRAM or auto (`tag|ram`, `tag|vram`),
+  also on a server that otherwise runs on the other device. A pin that can't load is retried 3 times,
+  then its memory is used as usual. Pins change live through `PUT /api/runtime-settings`
+  (`pinned_models`, saved in `.env`) and count toward `MATRICXON_MAX_LOADED_MODELS`;
+  `GET /api/node/load` reports each pin's state, total RAM and the GPU's memory.
 - **Cancelling one reply.** A `request_id` on `/api/chat` stops just that reply; the model and
   other users' replies are untouched.
 - **OpenAI-compatible API.** `/v1/chat/completions` (streamed or whole), `/v1/embeddings` and
@@ -231,6 +238,7 @@ variables win). All of them are listed in `app/config.py`.
 | `MATRICXON_HOST`, `MATRICXON_PORT` | `0.0.0.0`, `8420` | Where the server listens |
 | `MATRICXON_MODELS_DIR` | `./data/models` | Where models are stored |
 | `MATRICXON_MAX_LOADED_MODELS` | `2` | Chat models kept in RAM at once (embedding, reranking and vision-role models don't count) |
+| `MATRICXON_PINNED_MODELS` | none | Models kept loaded, separated by commas: loaded in the background after start, never unloaded for being idle or to make room. Each is `tag` (auto: GPU VRAM when the model fits, else RAM), `tag\|ram` or `tag\|vram`. Pinned chat models count toward `MATRICXON_MAX_LOADED_MODELS` |
 | `MATRICXON_DEFAULT_KEEP_ALIVE_SECONDS` | `300` | Idle time before a model unloads |
 | `MATRICXON_MEMORY_SAFETY_MARGIN` | `1.2` | Free RAM needed beyond a model's size (1.1 to 1.8) |
 | `MATRICXON_ENABLE_QUANTIZED_NATIVE_COMPUTE` | `true` | Multiply packed weights directly |

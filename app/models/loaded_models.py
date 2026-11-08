@@ -62,14 +62,15 @@ class LoadedModels:
                 return
 
     def evict_least_recently_used(self, max_loaded: int) -> None:
-        # Only among counted (chat) models: a helper never makes room for one, nor the reverse.
+        # Never a pinned model (app.models.pins). Only among counted (chat) models: a helper never
+        # makes room for one, nor the reverse.
         # If every one of them is busy this is a deliberate no-op, and get_or_load's caller loads
         # the new model alongside, temporarily over max_loaded rather than corrupting an in-flight
         # generation. A soft cap under contention is the honest tradeoff.
         idle = {
             tag: handle
             for tag, handle in self._handles.items()
-            if handle.counts_toward_limit and not handle.worker.is_busy()
+            if handle.counts_toward_limit and not handle.pinned and not handle.worker.is_busy()
         }
         if not idle:
             return

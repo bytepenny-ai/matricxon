@@ -222,7 +222,7 @@ class ModelManager:
                 handle.keep_alive_seconds = default_keep_alive_seconds
             if cache_changed:
                 budget = self.settings.prompt_cache_budget_bytes
-                if self.on_gpu:  # never above the VRAM cap set at load
+                if handle.on_gpu:  # never above the VRAM cap set at load
                     budget = min(budget, handle.prompt_cache.budget_bytes)
                 handle.prompt_cache.set_limits(self.settings.prompt_cache_slots, budget)
             if max_decode_batch is not None:

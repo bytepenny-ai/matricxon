@@ -50,6 +50,11 @@ class ModelHandle:
     # False for a helper (embedding, reranker, vision role): never counts toward max_loaded
     # (load_limit.py).
     counts_toward_limit: bool = True
+    # Pinned (app.models.pins): never expires and is never evicted to make room; an unload request
+    # still unloads it.
+    pinned: bool = False
+    # Its weights are on a GPU (else in RAM): each model's own place (app.models.placement).
+    on_gpu: bool = False
 
     @property
     def expires_at(self) -> float:
@@ -59,7 +64,7 @@ class ModelHandle:
         return self.expires_at - now
 
     def is_expired(self, now: float) -> bool:
-        return self.expires_in(now) <= 0
+        return not self.pinned and self.expires_in(now) <= 0
 
     def touch(self, now: float, keep_alive_seconds: int | None = None) -> None:
         if keep_alive_seconds is not None:

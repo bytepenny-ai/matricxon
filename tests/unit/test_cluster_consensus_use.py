@@ -233,11 +233,12 @@ def test_deleting_a_model_needs_the_pull_lease_like_pulling_one():
         delete=lambda tag: touched.append(tag), check_deletable=lambda tag: None
     )
     manager = SimpleNamespace(unload=lambda tag: touched.append(tag))
+    no_pins = SimpleNamespace(tags=lambda: [])  # the node pins nothing: no pin to remove
     with pytest.raises(NotLeaseHolderError):
-        delete_model(DeleteRequest(model="m"), catalog, manager, runtime)
+        delete_model(DeleteRequest(model="m"), catalog, manager, runtime, no_pins, None)
     assert touched == []
     owner = SimpleNamespace(keeper=SimpleNamespace(holds=lambda name: True), leases=None)
-    delete_model(DeleteRequest(model="m"), catalog, manager, owner)
+    delete_model(DeleteRequest(model="m"), catalog, manager, owner, no_pins, None)
     assert touched == ["m", "m"]
 
 

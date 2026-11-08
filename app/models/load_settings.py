@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -18,3 +18,5 @@ class LoadSettings:
     prompt_cache_budget_bytes: int
     max_decode_batch: int
     gpu_weight_mode: str
+    # Where a model loads, by tag: "auto", "ram" or "vram" (app.models.placement); set by pins.
+    model_memory: dict[str, str] = field(default_factory=dict)

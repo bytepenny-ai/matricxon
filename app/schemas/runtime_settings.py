@@ -15,6 +15,10 @@ class RuntimeSettingsUpdate(BaseModel):
     prompt_cache_budget_mb: int | None = Field(default=None, ge=64, le=1_048_576)
     max_decode_batch: int | None = Field(default=None, ge=1, le=64)
     log_level: int | None = Field(default=None, ge=0, le=2)
+    # Models kept loaded (app.models.pins): the whole list, each "tag", "tag|ram" or "tag|vram"
+    # (where it loads; plain: auto); [] or null removes every pin. Saved in
+    # the node's .env (MATRICXON_PINNED_MODELS). Refused (409) past max_loaded_models chat models.
+    pinned_models: list[str] | None = Field(default=None, max_length=64)
     # Apply from the next model load.
     enable_quantized_native_compute: bool | None = None
     gemv_backend: Literal["numba", "native"] | None = None

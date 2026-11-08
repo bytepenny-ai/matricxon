@@ -16,6 +16,7 @@ from app.models.load_dtype import (
 )
 from app.models.load_settings import LoadSettings
 from app.models.memory_guard import ensure_enough_memory_to_load
+from app.models.placement import ModelPlacement
 from app.models.tokenizer_dispatch import build_tokenizer
 from app.models.worker import ModelWorker
 from app.runtime.batch_decode import BatchDecoder
@@ -41,7 +42,7 @@ class HandleBuilder:
         cache_store: PersistentCacheStore | None,
     ) -> None:
         self._catalog = catalog
-        self._device = device
+        self.placement = ModelPlacement(device)
         self._settings = settings
         self._cache_store = cache_store
         self._registry = ArchitectureRegistry()
@@ -57,6 +58,24 @@ class HandleBuilder:
             return self._settings.prompt_cache_budget_bytes
         vram_left = max(0, free_before_load - weight_bytes)
         return min(self._settings.prompt_cache_budget_bytes, vram_left // 2)
+
+    def _plan(
+        self, device: ComputeDevice, architecture_cls: type, tensor_infos: list
+    ) -> tuple[bool, bool, bool, int]:
+        """On that device: (on_gpu, packed on the GPU, quantized-native compute, bytes needed)."""
+        on_gpu = device.is_gpu
+        wired = architecture_cls.NAME in QUANTIZED_NATIVE_WIRED_ARCHITECTURES
+        gpu_packed = on_gpu and wired and self._settings.gpu_weight_mode == "packed"
+        quantized_native_enabled = gpu_packed or (
+            self._settings.enable_quantized_native_compute and not on_gpu and wired
+        )
+        real_bytes_needed = estimate_quantized_native_bytes(
+            tensor_infos,
+            quantized_native_enabled,
+            architecture_cls.NAME,
+            packable=TorchDequantizer.supports if gpu_packed else None,
+        )
+        return on_gpu, gpu_packed, quantized_native_enabled, real_bytes_needed
 
     def build(
         self, tag: str, keep_alive_seconds: int | None, now: float, loaded_tags: list[str]
@@ -81,30 +100,30 @@ class HandleBuilder:
         # smaller number could wrongly pick float32 with less headroom than assumed. The CPU
         # packed-weight kernels read the mmap, so a GPU model either materializes in bf16 or, with
         # gpu_weight_mode="packed", uploads supported quant types still packed.
-        on_gpu = self._device.is_gpu
+        # Each model's own place (app.models.placement): the server's device unless pinned to RAM
+        # or VRAM; "auto" takes the GPU only when the model fits there, else the CPU.
+        wish = self._settings.model_memory.get(tag)
+        device = self.placement.device_for(wish)
+        plan = self._plan(device, architecture_cls, tensor_infos)
+        if wish == "auto" and device.is_gpu:
+            free = device.free_memory_bytes() or 0
+            margin = self._settings.memory_safety_margin
+            if not architecture_cls.SUPPORTS_GPU or free < plan[3] * margin:
+                device = self.placement.device_for("ram")
+                plan = self._plan(device, architecture_cls, tensor_infos)
+        on_gpu, gpu_packed, quantized_native_enabled, real_bytes_needed = plan
         if on_gpu and not architecture_cls.SUPPORTS_GPU:
             raise DeviceUnavailableError(
                 f"architecture {architecture_cls.NAME!r} has no GPU support yet (CPU only)"
             )
-        wired = architecture_cls.NAME in QUANTIZED_NATIVE_WIRED_ARCHITECTURES
-        gpu_packed = on_gpu and wired and self._settings.gpu_weight_mode == "packed"
-        quantized_native_enabled = gpu_packed or (
-            self._settings.enable_quantized_native_compute and not on_gpu and wired
-        )
-        real_bytes_needed = estimate_quantized_native_bytes(
-            tensor_infos,
-            quantized_native_enabled,
-            architecture_cls.NAME,
-            packable=TorchDequantizer.supports if gpu_packed else None,
-        )
 
-        free_before_load = (self._device.free_memory_bytes() or 0) if on_gpu else 0
+        free_before_load = (device.free_memory_bytes() or 0) if on_gpu else 0
         ensure_enough_memory_to_load(
             tag,
             real_bytes_needed,
             self._settings.memory_safety_margin,
             loaded_tags,
-            available_fn=self._device.free_memory_bytes if on_gpu else None,
+            available_fn=device.free_memory_bytes if on_gpu else None,
             memory_kind="VRAM" if on_gpu else "memory",
         )
         # float32-vs-bf16 for what stays float: with quantized-native compute that is a small part
@@ -112,7 +131,7 @@ class HandleBuilder:
         # bf16 size, which made a 4B model always fall to bf16, ~10x slower here (no hardware bf16;
         # measured: Qwen3.5-4B decode 1.65 -> 0.18 tok/s).
         dtype = (
-            self._device.load_dtype()
+            device.load_dtype()
             if on_gpu
             else select_load_dtype(
                 real_bytes_needed if quantized_native_enabled else bf16_bytes,
@@ -155,7 +174,7 @@ class HandleBuilder:
             loader.close()
             raise
         try:
-            architecture.place_on(self._device.torch_device, packed_weights=gpu_packed)
+            architecture.place_on(device.torch_device, packed_weights=gpu_packed)
         except Exception:
             architecture.close()
             raise
@@ -169,6 +188,7 @@ class HandleBuilder:
             worker=ModelWorker(BatchDecoder(architecture, batch), batch),
             capabilities=installed.capabilities,
             size_bytes=installed.size_bytes,
+            on_gpu=on_gpu,
             keep_alive_seconds=(
                 keep_alive_seconds
                 if keep_alive_seconds is not None

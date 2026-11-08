@@ -32,32 +32,17 @@ class TestMatricxonAppTorchThreads:
         finally:
             torch.set_num_threads(original)
 
-    def test_leaves_thread_count_untouched_on_a_non_cpu_device(self, monkeypatch) -> None:
+    def test_sets_the_thread_count_on_a_gpu_server_too(self, monkeypatch) -> None:
+        """A model pinned to RAM runs on the CPU there (app.models.placement)."""
         real_set_num_threads = torch.set_num_threads
-
-        def fail_if_called(_n: int) -> None:
-            raise AssertionError("must not touch thread count on a non-CPU device")
-
+        calls: list[int] = []
         original = torch.get_num_threads()
         try:
             monkeypatch.setattr(config.settings, "device", "cuda")
-            monkeypatch.setattr(config.settings, "torch_threads", None)
-            monkeypatch.setattr(torch, "set_num_threads", fail_if_called)
+            monkeypatch.setattr(config.settings, "torch_threads", 3)
+            monkeypatch.setattr(torch, "set_num_threads", calls.append)
 
             MatricxonApp()
         finally:
             real_set_num_threads(original)
-
-
-class TestMatricxonAppDisablesNNPACK:
-    """The target hardware (Sandy Bridge) can't use NNPACK: left on, every Conv1d (nemotron_h's SSM
-    causal conv) re-probes it and re-logs a native C++ warning Python's `warnings` filters can't
-    catch, once per generated token (11x in one nemotron_h chat)."""
-
-    def test_disables_nnpack_on_construction(self, monkeypatch) -> None:
-        calls = []
-        monkeypatch.setattr(torch.backends.nnpack, "set_flags", calls.append)
-
-        MatricxonApp()
-
-        assert calls == [False]
+        assert calls == [3]

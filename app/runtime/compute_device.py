@@ -86,6 +86,15 @@ class ComputeDevice:
             return False
         return True
 
+    def total_memory_bytes(self) -> int | None:
+        """The GPU's memory; None on the CPU. On MPS: Metal's recommended working set."""
+        if not self.is_gpu:
+            return None
+        if self.is_mps:
+            return torch.mps.recommended_max_memory()
+        _free, total = torch.cuda.mem_get_info(self._device)
+        return total
+
     def free_memory_bytes(self) -> int | None:
         """Free GPU memory; None on the CPU, where `available_memory_bytes` applies. On MPS (shared
         with system RAM): Metal's recommended working set minus what is already allocated."""
