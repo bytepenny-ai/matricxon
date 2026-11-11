@@ -1,9 +1,9 @@
 """Which models count toward `max_loaded_models`: chat models only.
 
-Embedding and reranking models, and a model asked for in the vision role (pAIring's default vision
-model, used for an image attachment), are helpers: they load beside the chat models instead of
-pushing one out. The memory check before every load (`ensure_enough_memory_to_load`) still guards
-RAM, and keep-alive still unloads idle helpers.
+Embedding, reranking and forecasting models, and a model asked for in the vision role (pAIring's
+default vision model, used for an image attachment), are helpers: they load beside the chat models
+instead of pushing one out. The memory check before every load (`ensure_enough_memory_to_load`)
+still guards RAM, and keep-alive still unloads idle helpers.
 """
 
 from app.architectures.registry import is_scoring_model
@@ -31,9 +31,9 @@ class LoadLimit:
         if tag not in self._helper_kind:
             try:
                 installed = self._catalog.get(tag)
-                helper = "embedding" in installed.capabilities or is_scoring_model(
-                    self._catalog.gguf_path_for_tag(tag)
-                )
+                helper = bool(
+                    {"embedding", "forecast"} & set(installed.capabilities)
+                ) or is_scoring_model(self._catalog.gguf_path_for_tag(tag))
             except Exception:  # noqa: BLE001 - unknown tag: count it; the load reports the real error
                 return True
             self._helper_kind[tag] = helper

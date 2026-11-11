@@ -38,6 +38,7 @@ from app.routers import (
     delete_router,
     embed_router,
     embeddings_router,
+    forecast_router,
     generate_router,
     health_router,
     live_router,
@@ -55,12 +56,14 @@ from app.routers import (
     version_router,
 )
 from app.routers.tags_router import TagsRequestHandler
+from app.runtime.cache_crypto import CacheKeyMissingError
 from app.runtime.compute_device import ComputeDevice
 from app.runtime.cpu_cores import CpuCores
 from app.server.errors import DeviceUnavailableError, ErrorHandlerRegistrar
 from app.server.log_filters import LOG_LEVELS_BY_SETTING, quiet_cluster_logging
 from app.server.pidfile import PidFile
 from app.server.request_context import RequestContextMiddleware
+from app.storage.path_access import PathAccess
 
 
 class MatricxonApp:
@@ -84,6 +87,7 @@ class MatricxonApp:
         generate_router.router,
         embed_router.router,
         rerank_router.router,
+        forecast_router.router,
         version_router.router,
         copy_router.router,
         create_router.router,
@@ -141,7 +145,7 @@ class MatricxonApp:
         # Built now, not on the first request: runs the cache dir cleanup and indexing at boot (past
         # a time budget the rest goes on in the background: get_cache_store), and a cluster node
         # without its provisioned key fails here, not on its first chat.
-        await asyncio.to_thread(get_cache_store)
+        await self._start_cache_store()
         # A new node logs the token pAIring's Add nodes form asks for (cluster/join_token.py).
         await asyncio.to_thread(get_join_token().announce)
         TagsRequestHandler(get_model_catalog()).warm_up()
@@ -167,6 +171,21 @@ class MatricxonApp:
                 consensus.stop()
             await asyncio.to_thread(get_model_manager().shutdown)
             self._pid_file.remove()
+
+    @staticmethod
+    async def _start_cache_store() -> None:
+        """Opens the saved-cache store; a folder or key lost after the preflight (a share dropped
+        meanwhile) ends the start with one plain line. Uvicorn prints a traceback for any
+        exception here, even SystemExit, so the process ends directly; nothing is held yet."""
+        try:
+            await asyncio.to_thread(get_cache_store)
+        except (OSError, CacheKeyMissingError) as error:
+            logging.getLogger(__name__).critical(
+                "matricxon cannot start: %s: %s", error, PathAccess.MOUNT_HINT
+            )
+            for handler in logging.getLogger().handlers:
+                handler.flush()
+            os._exit(1)
 
     @staticmethod
     def require_device() -> None:

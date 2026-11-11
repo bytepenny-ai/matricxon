@@ -173,3 +173,38 @@ class TestLiveRouter:
         assert body["requests"][0]["phase"] == "queued"
         assert body["requests"][0]["prompt_tokens"] == 7
         assert registry.watched
+
+
+class TestFirstReplyOfAFreshModel:
+    """A model's first reply loads its weights during the first forward pass; the live view must
+    still see each layer of that prefill (an image prompt is one long piece: it looked frozen)."""
+
+    def test_layers_and_stage_times_are_reported(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import torch
+
+        from app.architectures.llama import LlamaArchitecture
+        from app.gguf.loader import GGUFModelLoader
+        from tests.tiny_gguf_llama import build_tiny_llama_gguf
+
+        loader = GGUFModelLoader(build_tiny_llama_gguf(tmp_path / "tiny.gguf"), dtype=torch.float32)
+        model = LlamaArchitecture.from_gguf(loader, dtype=torch.float32)
+        assert not model.is_materialized
+        registry = LiveRegistry()
+        monkeypatch.setattr(LiveRegistry, "_shared", registry)
+        registry.snapshot()  # someone watches
+        layers_seen: list[int] = []
+        profiler = StageProfiler.of(model)
+        live = LiveRequest("r1", "tiny")
+        original = live.prefilled
+
+        def record(tokens: int) -> None:
+            layers_seen.append(profiler.layer or 0)
+            original(tokens)
+
+        live.prefilled = record
+        ChatEngine(model, eos_token_ids=set(), live=live).generate(_request(num_predict=1))
+
+        assert layers_seen and layers_seen[0] == profiler.layer_count  # the last layer had run
+        assert sum(profiler.snapshot().values()) > 0

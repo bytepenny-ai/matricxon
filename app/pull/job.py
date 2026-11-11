@@ -96,7 +96,9 @@ class PullJob:
             size_bytes=gguf_path.stat().st_size,
             family=metadata.architecture,
             parameter_size=self._format_parameter_size(metadata),
-            context_length=metadata.get_u32(metadata.arch_key("context_length"), 0),
+            # Forecasters (timesfm25) name it `context_limit`, in time steps.
+            context_length=metadata.get_u32(metadata.arch_key("context_length"))
+            or metadata.get_u32(metadata.arch_key("context_limit"), 0),
         )
         ModelCatalog(self._models_dir).write_sidecar(installed)
 

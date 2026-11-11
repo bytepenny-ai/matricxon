@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.models.load_dtype import MEMORY_SAFETY_MARGIN
 
 # A software version, not an env-overridable knob; GET /api/version reads it.
-MATRICXON_VERSION = "2.1.1"  # the git tag; keep in step when tagging a release
+MATRICXON_VERSION = "2.1.2"  # the git tag; keep in step when tagging a release
 
 
 class Settings(BaseSettings):
@@ -135,9 +135,10 @@ class Settings(BaseSettings):
     # a C
     # compiler.
     gemv_backend: Literal["numba", "native"] = "native"
-    # EXPERIMENTAL, untested on real hardware yet: wider integer SIMD in the native kernels where
-    # the CPU has it (AVX2, AVX-VNNI/AVX-512 VNNI, ARM NEON dot product). Off: SSSE3 or plain C.
-    wide_simd: bool = False
+    # Wider integer SIMD in the native kernels where the CPU has it (AVX2, AVX-VNNI/AVX-512 VNNI,
+    # ARM NEON dot product); each path is built only for a CPU that has it, else SSSE3 or plain C.
+    # On by default for a fresh install; an existing .env value is kept.
+    wide_simd: bool = True
     # EXPERIMENTAL, untested on a real GPU yet: fused Triton kernels for packed Q8_0/Q4_K weights at
     # decode (gpu_weight_mode "packed"; app/architectures/triton_gemv.py).
     gpu_fused_kernels: bool = False

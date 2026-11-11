@@ -14,17 +14,26 @@ DEFAULT_INSTRUCTION = "Given a web search query, retrieve relevant passages that
 
 
 class ModelKind:
-    """Keeps chat away from scoring models and rerank away from chat models."""
+    """Keeps chat away from scoring and forecasting models, and rerank away from chat models."""
 
     @staticmethod
     def labels(architecture: ModelArchitecture) -> list[str] | None:
         return getattr(architecture, "score_labels", None)
+
+    @staticmethod
+    def is_forecaster(architecture: object) -> bool:
+        """An architecture instance or class that forecasts time series (no tokenizer)."""
+        return bool(getattr(architecture, "IS_FORECASTER", False))
 
     @classmethod
     def require_generative(cls, handle: ModelHandle) -> None:
         if cls.labels(handle.architecture):
             raise WrongModelKindError(
                 f"{handle.tag} is a reranking model; use /api/rerank instead of chat."
+            )
+        if cls.is_forecaster(handle.architecture):
+            raise WrongModelKindError(
+                f"{handle.tag} is a forecasting model; use /api/forecast instead."
             )
 
     @classmethod

@@ -985,6 +985,92 @@
         "title": "EmbeddingsResponse",
         "type": "object"
       },
+      "ForecastRequest": {
+        "properties": {
+          "clamp_non_negative": {
+            "default": true,
+            "title": "Clamp Non Negative",
+            "type": "boolean"
+          },
+          "horizon": {
+            "minimum": 1.0,
+            "title": "Horizon",
+            "type": "integer"
+          },
+          "keep_alive": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Alive"
+          },
+          "max_context": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Context"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "series": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Series",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model",
+          "series",
+          "horizon"
+        ],
+        "title": "ForecastRequest",
+        "type": "object"
+      },
+      "ForecastResponse": {
+        "properties": {
+          "forecasts": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesForecast"
+            },
+            "title": "Forecasts",
+            "type": "array"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "horizon",
+          "forecasts"
+        ],
+        "title": "ForecastResponse",
+        "type": "object"
+      },
       "FreshnessResponse": {
         "properties": {
           "fresh": {
@@ -2741,6 +2827,41 @@
         "title": "RuntimeSettingsUpdate",
         "type": "object"
       },
+      "SeriesForecast": {
+        "properties": {
+          "mean": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Mean",
+            "type": "array"
+          },
+          "point": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Point",
+            "type": "array"
+          },
+          "quantiles": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Quantiles",
+            "type": "object"
+          }
+        },
+        "required": [
+          "point",
+          "mean",
+          "quantiles"
+        ],
+        "title": "SeriesForecast",
+        "type": "object"
+      },
       "ShowRequest": {
         "properties": {
           "model": {
@@ -3194,7 +3315,7 @@
   "info": {
     "description": "Matricxon's HTTP API: Ollama-style routes under /api, OpenAI-compatible routes under /v1, and Prometheus metrics at /metrics. Errors answer as `{\"error\": <message>, \"code\": <stable code>}` (OpenAI's error shape on /v1).",
     "title": "Matricxon",
-    "version": "2.1.1"
+    "version": "2.1.2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -4053,6 +4174,44 @@
           }
         },
         "summary": "Post Embeddings"
+      }
+    },
+    "/api/forecast": {
+      "post": {
+        "operationId": "post_forecast_api_forecast_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForecastRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Forecast"
       }
     },
     "/api/generate": {

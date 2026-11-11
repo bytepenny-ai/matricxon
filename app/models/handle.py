@@ -29,7 +29,8 @@ class ModelHandle:
 
     tag: str
     architecture: ModelArchitecture
-    tokenizer: Tokenizer
+    # None for a forecasting model (it reads numbers, not text).
+    tokenizer: Tokenizer | None
     worker: ModelWorker
     capabilities: list[str]
     size_bytes: int

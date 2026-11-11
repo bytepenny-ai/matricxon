@@ -17,6 +17,7 @@ from app.architectures.qwen3 import Qwen3Architecture
 from app.architectures.qwen35 import Qwen35Architecture
 from app.architectures.score_head import ScoreHead
 from app.architectures.starcoder2 import Starcoder2Architecture
+from app.architectures.timesfm25 import TimesFm25Architecture
 from app.gguf.metadata import GGUFMetadata
 from app.gguf.reader import GGUFReader
 from app.server.errors import UnsupportedArchitectureError
@@ -42,6 +43,7 @@ class ArchitectureRegistry:
         CommandRArchitecture,
         Starcoder2Architecture,
         FalconArchitecture,
+        TimesFm25Architecture,
     ]
 
     def resolve(self, metadata: GGUFMetadata) -> type[ModelArchitecture]:

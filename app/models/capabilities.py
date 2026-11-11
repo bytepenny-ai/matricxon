@@ -9,6 +9,8 @@ from app.runtime.chat_template import has_confirmed_chat_format
 
 _THINKING_MARKERS = ("thinking", "reasoning")
 _ENCODER_ARCHITECTURES = ("bert", "nomic-bert")
+# Time-series forecasters (POST /api/forecast): numbers in, numbers out.
+FORECAST_ARCHITECTURES = ("timesfm25",)
 # A `clip` mmproj file (a vision tower + projector, e.g. a LLaVA pull's `:mmproj` suffix) isn't
 # `ArchitectureRegistry`-resolvable alone ("clip" isn't in `_ARCHITECTURES`): a `/api/chat` against
 # it would fail, so it must never be reported "completion" (it previously fell into the "anything
@@ -40,6 +42,8 @@ class CapabilityInferer:
     def infer(self, repo_id: str, filename: str, architecture: str) -> list[str]:
         if architecture == _MMPROJ_ARCHITECTURE:
             return []
+        if architecture in FORECAST_ARCHITECTURES:
+            return ["forecast"]
         is_encoder = architecture in _ENCODER_ARCHITECTURES
         capabilities = ["embedding" if is_encoder else "completion"]
         haystack = f"{repo_id}/{filename}".lower()
@@ -76,6 +80,9 @@ def effective_capabilities(installed: InstalledModel, has_paired_mmproj: bool) -
     if is_scoring_model(installed.path):
         # A reranker scores (POST /api/rerank); it can't chat or embed.
         return ["rerank"]
+    if installed.architecture in FORECAST_ARCHITECTURES:
+        # A forecaster (POST /api/forecast) has no chat template, tools or thinking.
+        return ["forecast"]
     capabilities = installed.capabilities
     has_real_fusion = has_paired_mmproj and installed.architecture in _VISION_FUSION_ARCHITECTURES
     if has_real_fusion and "vision" not in capabilities:

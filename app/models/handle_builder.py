@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import torch
+
 from app.architectures.mistral3 import Mistral3TextArchitecture
 from app.architectures.registry import ArchitectureRegistry
 from app.gguf.dequant.torch_dequant import TorchDequantizer
@@ -26,6 +28,7 @@ from app.runtime.chat_stop_tokens import extra_eos_token_ids
 from app.runtime.chat_template import PromptBuilderFactory
 from app.runtime.compute_device import ComputeDevice
 from app.runtime.prompt_cache import PromptCache
+from app.runtime.rerank_engine import ModelKind
 from app.runtime.tool_call_formats import ToolCallFormats
 from app.server.errors import DeviceUnavailableError
 
@@ -92,6 +95,7 @@ class HandleBuilder:
         tensor_infos = parsed.tensor_infos
         bf16_bytes = exact_bf16_bytes(tensor_infos)
         architecture_cls = self._registry.resolve(parsed.metadata)
+        forecaster = ModelKind.is_forecaster(architecture_cls)
 
         # Why this breaker needs its own smaller estimate in this mode:
         # Settings.enable_quantized_native_compute / estimate_quantized_native_bytes.
@@ -112,6 +116,8 @@ class HandleBuilder:
                 device = self.placement.device_for("ram")
                 plan = self._plan(device, architecture_cls, tensor_infos)
         on_gpu, gpu_packed, quantized_native_enabled, real_bytes_needed = plan
+        if forecaster:
+            real_bytes_needed = 2 * bf16_bytes  # float32 weights
         if on_gpu and not architecture_cls.SUPPORTS_GPU:
             raise DeviceUnavailableError(
                 f"architecture {architecture_cls.NAME!r} has no GPU support yet (CPU only)"
@@ -130,8 +136,11 @@ class HandleBuilder:
         # of the model, so size the decision from the real packed footprint, not the full unpacked
         # bf16 size, which made a 4B model always fall to bf16, ~10x slower here (no hardware bf16;
         # measured: Qwen3.5-4B decode 1.65 -> 0.18 tok/s).
+        # A forecaster always computes in float32 (TimesFm25Architecture).
         dtype = (
-            device.load_dtype()
+            torch.float32
+            if forecaster
+            else device.load_dtype()
             if on_gpu
             else select_load_dtype(
                 real_bytes_needed if quantized_native_enabled else bf16_bytes,
@@ -168,8 +177,11 @@ class HandleBuilder:
                 architecture = architecture_cls.from_gguf(
                     loader, dtype=dtype, **quantized_native_kwargs
                 )
-            tokenizer = build_tokenizer(loader.metadata)
-            prompt_builder = PromptBuilderFactory.for_metadata(loader.metadata, tag=tag)
+            # A forecaster reads numbers: no tokenizer, no chat template.
+            tokenizer = None if forecaster else build_tokenizer(loader.metadata)
+            prompt_builder = (
+                None if forecaster else PromptBuilderFactory.for_metadata(loader.metadata, tag=tag)
+            )
         except Exception:
             loader.close()
             raise

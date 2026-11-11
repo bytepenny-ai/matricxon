@@ -109,7 +109,10 @@ class StorageInspector:
     """Size and free space of a path (free space of the nearest existing ancestor's disk)."""
 
     def usage(self, path: Path) -> StorageUsage:
-        exists = path.exists()
+        try:
+            exists = path.exists()
+        except OSError:  # permission denied or a stale share: reported as not there, never a crash
+            exists = False
         return StorageUsage(exists, self._size(path) if exists else 0, self._free(path))
 
     @staticmethod
@@ -127,10 +130,10 @@ class StorageInspector:
 
     @staticmethod
     def _free(path: Path) -> int | None:
-        probe = path.resolve()
-        while not probe.exists() and probe != probe.parent:
-            probe = probe.parent
         try:
+            probe = path.resolve()
+            while not probe.exists() and probe != probe.parent:
+                probe = probe.parent
             return shutil.disk_usage(probe).free
         except OSError:
             return None

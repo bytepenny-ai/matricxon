@@ -101,6 +101,13 @@ class UnsupportedOptionError(MatricxonError):
     code = "unsupported_option"
 
 
+class InvalidForecastInputError(MatricxonError):
+    """A forecast request the model can't answer (e.g. a horizon past its limit)."""
+
+    status_code = 400
+    code = "invalid_forecast_input"
+
+
 class UnsupportedChatRoleError(MatricxonError):
     status_code = 400
     code = "unsupported_chat_role"

@@ -3,6 +3,12 @@
 Notable changes in each Matricxon release. Security fixes are marked **Security**. Full release notes and news:
 https://bytepenny.com/rss/
 
+## 2.1.2 (2026-11-11)
+
+- Wider CPU instructions in the native kernels (AVX2, VNNI, ARM dot product) are on by default for a fresh install (`MATRICXON_WIDE_SIMD`); a CPU without them uses the plain kernels, and an existing `.env` value is kept.
+- A shared folder that is missing, not mounted, not readable or behind a stale NFS handle now stops the start with one plain line naming the folder and the reason, on every node, instead of a Python error trace. The cluster readiness check no longer fails on such a folder.
+- Time-series forecasting: `POST /api/forecast` runs Google TimesFM 2.5 (`timesfm25` GGUF). It returns a point forecast, the mean and nine quantiles per step, up to 128 steps ahead, and matches Hugging Face `transformers`. A forecasting model lists only the `forecast` capability and can't be used for chat.
+
 ## 2.1.1 (2026-11-08)
 
 - Pinned models (`MATRICXON_PINNED_MODELS`): loaded in the background after start and never unloaded for being idle or to make room. A pin that can't load is tried 3 times, a minute apart, then its memory is used as usual. Each pin can choose RAM, GPU VRAM or auto (`tag|ram`, `tag|vram`), also on a server that otherwise runs on the CPU or the GPU. Set live with `PUT /api/runtime-settings` (`pinned_models`, saved in `.env`); `/api/node/load` and `/api/ps` report pins and their state. Deleting a model removes its pin; a pin whose model is gone fails at once instead of retrying.

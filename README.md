@@ -35,7 +35,7 @@
 <br>
 
 A small, readable LLM inference runtime written from scratch in Python and PyTorch (optionally native C kernels are used for the dequantization stages and various forward-pass steps, for speed). It runs GGUF models locally - chat and text generation, embeddings, reranking and vision-language
-models - and serves them through an HTTP API, so tools like [pAIring](https://github.com/bytepenny-ai/pairing) can use all of its features.
+models, plus time-series forecasting - and serves them through an HTTP API, so tools like [pAIring](https://github.com/bytepenny-ai/pairing) can use all of its features.
 
 **Cluster mode:** several Matricxon nodes can share models and chat caches and agree on membership through built-in Paxos consensus. The cluster is fully managed from pAIring's advanced cluster management, with live node and cluster status on an interactive map that adapts from a few nodes to hundreds. Cluster mode is in BETA: it is designed for hundreds of nodes, but so far only small clusters have been tested.
 
@@ -69,6 +69,7 @@ dequantization, the transformer forward passes, caching, sampling and scheduling
 | `phi2` | Phi-2, moondream2 (vision) | checked on real weights |
 | `starcoder2` | StarCoder2 | checked on real weights |
 | `bert`, `nomic-bert` | Embedding models | checked on real weights |
+| `timesfm25` | Google TimesFM 2.5 (time-series forecasting) | checked on real weights |
 
 "Checked on real weights" means it was run on a real downloaded model and the output verified:
 logits compared with Hugging Face `transformers` or llama.cpp, or coherent, correct generation.
@@ -122,6 +123,13 @@ raw integer types, which fail with a clear error.
   `hf.co/ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF`); its scores match llama.cpp's within 0.01. A
   reranker lists only the `rerank` capability and can't be used for chat. pAIring uses it to pick
   the best Knowledge base passages.
+- **Time-series forecasting.** `POST /api/forecast` takes one or more series of numbers and
+  returns the next values: a point forecast (the median), the mean and nine quantiles (0.1 to 0.9)
+  for each step. Supported: Google TimesFM 2.5 (200M parameters,
+  `hf.co/amaye15/timesfm-gguf:q8`, `:f16` or `:f32`), up to 16384 past values and 128 steps
+  ahead. With `:f32` its forecasts match Hugging Face `transformers` within 1e-5 of the series'
+  spread; `:q8` stays within 6% (2% for the median). A forecaster lists only the
+  `forecast` capability and can't be used for chat.
 - **Safe memory use.** A model that would not fit in free RAM (with a safety margin) is refused. Idle models unload after a keep-alive time.
 - **Pinned models.** `MATRICXON_PINNED_MODELS` keeps chosen models loaded: they load in the background
   right after start (smallest first, while the server already answers) and are never unloaded for
@@ -154,6 +162,7 @@ raw integer types, which fail with a clear error.
 | `POST /api/generate` | Raw-prompt completion, no chat template |
 | `POST /api/embeddings`, `POST /api/embed` | Mean-pooled, L2-normalized vectors (single and list input) |
 | `POST /api/rerank` | Matricxon-only: `{model, query, documents, top_n?, instruction?, return_documents?}` -> `{results: [{index, relevance_score}]}`, best first |
+| `POST /api/forecast` | Matricxon-only: `{model, series: [[...]], horizon, max_context?, clamp_non_negative?}` -> `{forecasts: [{point, mean, quantiles}]}`, one per series |
 | `POST /api/pull` | Downloads `hf.co/<repo>:<file>` from Hugging Face with progress and sha256 check |
 | `GET /api/tags`, `POST /api/show`, `GET /api/ps` | Installed models, model details, loaded models with expiry |
 | `DELETE /api/delete`, `POST /api/copy`, `POST /api/create` | Remove, duplicate, re-tag (`create` supports only `FROM <tag>`) |
@@ -237,7 +246,7 @@ variables win). All of them are listed in `app/config.py`.
 | --- | --- | --- |
 | `MATRICXON_HOST`, `MATRICXON_PORT` | `0.0.0.0`, `8420` | Where the server listens |
 | `MATRICXON_MODELS_DIR` | `./data/models` | Where models are stored |
-| `MATRICXON_MAX_LOADED_MODELS` | `2` | Chat models kept in RAM at once (embedding, reranking and vision-role models don't count) |
+| `MATRICXON_MAX_LOADED_MODELS` | `2` | Chat models kept in RAM at once (embedding, reranking, forecasting and vision-role models don't count) |
 | `MATRICXON_PINNED_MODELS` | none | Models kept loaded, separated by commas: loaded in the background after start, never unloaded for being idle or to make room. Each is `tag` (auto: GPU VRAM when the model fits, else RAM), `tag\|ram` or `tag\|vram`. Pinned chat models count toward `MATRICXON_MAX_LOADED_MODELS` |
 | `MATRICXON_DEFAULT_KEEP_ALIVE_SECONDS` | `300` | Idle time before a model unloads |
 | `MATRICXON_MEMORY_SAFETY_MARGIN` | `1.2` | Free RAM needed beyond a model's size (1.1 to 1.8) |

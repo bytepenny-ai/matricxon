@@ -164,6 +164,12 @@ class ChatEngine:
         room = max(sampling.num_ctx - prompt_len, 0)
         max_new_tokens = room if sampling.num_predict < 0 else min(sampling.num_predict, room)
 
+        # A model's first reply loads its weights inside the first forward pass, after the live
+        # view's stage hooks were skipped (they need real weights), so a long single-piece prefill
+        # (an image prompt) showed no layer progress. Loading them first lets the hooks attach.
+        materialize = getattr(self._architecture, "_ensure_materialized", None)
+        if materialize is not None:
+            materialize(stop_check)
         self._live.prefill(reused, self._profiler())
         try:
             forward_started = time.monotonic()

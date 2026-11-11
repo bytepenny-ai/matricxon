@@ -19,6 +19,7 @@ from app.architectures.qwen3 import Qwen3Architecture
 from app.architectures.qwen35 import Qwen35Architecture
 from app.architectures.registry import ArchitectureRegistry, unsupported_features
 from app.architectures.starcoder2 import Starcoder2Architecture
+from app.architectures.timesfm25 import TimesFm25Architecture
 from app.gguf.constants import GGUFValueType
 from app.gguf.metadata import GGUFMetadata
 from tools.make_tiny_gguf import GGUFBuilder
@@ -79,6 +80,7 @@ class TestSupportedNames:
             CommandRArchitecture.NAME,
             Starcoder2Architecture.NAME,
             FalconArchitecture.NAME,
+            TimesFm25Architecture.NAME,
         ]
 
     def test_every_name_is_a_real_string_not_a_class_object(self) -> None:
