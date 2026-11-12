@@ -5,6 +5,10 @@ https://bytepenny.com/rss/
 
 ## Unreleased
 
+- A reply whose client disconnects stops its work: it used to keep reading a long prompt for minutes (a deleted chat's reply kept both CPU cores busy). Every reply now gets an id to stop it by.
+
+- While a long prompt is still being read, `POST /api/chat` streams a `prompt_progress` line (tokens from the cache, tokens read so far, the layer being read) each time the read moves on, so a client can tell a slow read from a stuck one. The final line adds `prompt_cached_count`: of `prompt_eval_count`, the tokens reused from the prompt cache.
+
 - Gemma 4 reads images: put its image file (`mmproj-*.gguf`, e.g. `unsloth/gemma-4-E2B-it-GGUF:mmproj-F16`) next to the model and it reports `vision`. The `gemma4v` image encoder matches Hugging Face's to 4 decimals on three image shapes (tools/oracle/validate_gemma4_vision.py). Images use 70 tokens each.
 - A chat with an image is reused from the prompt cache for a model whose image placeholders are unique per picture (Gemma 4): the next message, even "OK", reads only what is new instead of the whole chat (163 of 174 tokens reused, 4 s instead of over a minute on a CPU). Encoded images are kept, so a picture sent again isn't re-encoded.
 

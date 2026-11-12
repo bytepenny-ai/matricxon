@@ -99,6 +99,25 @@ class ChatChunk(BaseModel):
         return self.model_dump(exclude_none=True)
 
 
+class ChatReadProgress(BaseModel):
+    """Sent while a long prompt is still being read (no token yet), each time the read moved on:
+    a client's timeout can tell a slow read from a stuck one."""
+
+    cached: int
+    read: int
+    total: int
+    layer: int | None = None
+
+
+class ChatProgressChunk(BaseModel):
+    message: ChatStreamMessage = ChatStreamMessage(content="")
+    done: bool = False
+    prompt_progress: ChatReadProgress
+
+    def to_ndjson_dict(self) -> dict:
+        return self.model_dump(exclude_none=True)
+
+
 class ChatDoneChunk(BaseModel):
     message: ChatStreamMessage = ChatStreamMessage(content="")
     done: bool = True
@@ -107,6 +126,9 @@ class ChatDoneChunk(BaseModel):
     total_duration: int | None = None
     load_duration: int | None = None
     prompt_eval_duration: int | None = None
+    # Of prompt_eval_count, the tokens reused from the prompt cache (not read again): a client
+    # measuring read speed divides the rest by prompt_eval_duration.
+    prompt_cached_count: int | None = None
     eval_duration: int | None = None
     # "stop" (the model ended it, or a stop text) or "length" (num_predict or num_ctx ran out).
     done_reason: str | None = None

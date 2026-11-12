@@ -107,6 +107,13 @@ class LiveRequest:
             return None
         return (len(times) - 1) / (times[-1] - times[0])
 
+    def read_progress(self) -> tuple[int, int, int | None]:
+        """(tokens reused from the cache, prompt tokens read so far, layer of the piece being read):
+        changes while a long prompt is read, before the first token."""
+        profiler = self._profiler
+        layer = profiler.layer if profiler is not None and profiler.attached else None
+        return self.reused_tokens, self.prefilled_tokens, layer
+
     def first_token_seconds(self) -> float | None:
         if self.first_token_at is None or self.prefill_started is None:
             return None

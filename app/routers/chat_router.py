@@ -18,6 +18,7 @@ from app.runtime.chat_prompt import ChatPrompt
 from app.runtime.generation_request import GenerationRequest
 from app.runtime.live_requests import LiveRegistry, LiveRequest
 from app.runtime.prompt_builder import Mistral3PromptBuilder
+from app.runtime.read_progress import ReadProgressQueue
 from app.runtime.reply_text_stream import ReplyTextStream
 from app.runtime.rerank_engine import ModelKind
 from app.runtime.stop_sequences import StopSequenceFilter
@@ -69,12 +70,13 @@ class ChatRequestHandler:
 
     @staticmethod
     def _prepared(request: ChatRequest) -> ChatRequest:
-        """Structured output turns thinking off; stop texts need an id to stop the reply by."""
+        """Structured output turns thinking off. Every reply gets an id to stop it by: stop texts
+        need one, and so does a client that disconnects (`_stream`)."""
         changes: dict[str, object] = {}
         if request.format is not None:
             changes["think"] = False
-        if request.options.stop and request.request_id is None:
-            changes["request_id"] = f"stop-{uuid.uuid4().hex}"
+        if request.request_id is None:
+            changes["request_id"] = f"req-{uuid.uuid4().hex}"
         return request.model_copy(update=changes) if changes else request
 
     def _handle(self, request: ChatRequest, live: LiveRequest) -> JSONResponse | NDJSONResponse:
@@ -121,15 +123,21 @@ class ChatRequestHandler:
         request: ChatRequest,
         live: LiveRequest,
     ) -> AsyncIterator[dict]:
-        """Wraps `_stream_tokens` so the live entry ends however the stream does."""
+        """Wraps `_stream_tokens` so the live entry ends however the stream does, and a client that
+        left (the stream closed before its end) stops the reply's work: it kept reading a long
+        prompt for minutes for a chat already deleted."""
         live.queued(prompt_eval_count)
+        finished = False
         try:
             async for chunk in self._stream_tokens(
                 handle, generation_request, prompt_eval_count, load_duration, request, live
             ):
                 yield chunk
+            finished = True
         finally:
             live.finish()
+            if not finished and request.request_id is not None:
+                handle.worker.cancel_job(request.request_id)
 
     async def _stream_tokens(
         self,
@@ -165,8 +173,12 @@ class ChatRequestHandler:
         eval_count = 0
         generation_started = time.monotonic()
         last_token_at = generation_started
+        queue = ReadProgressQueue(results, live, prompt_eval_count)
         while True:
-            item = await results.get()
+            item = await queue.get()
+            if isinstance(item, dict):  # the prompt is still being read (read_progress.py)
+                yield item
+                continue
             if item is None:
                 break
             if isinstance(item, Exception):
@@ -210,6 +222,7 @@ class ChatRequestHandler:
             eval_count=eval_count,
             load_duration=_seconds_to_ns(load_duration),
             prompt_eval_duration=_seconds_to_ns(first_token) if first_token is not None else None,
+            prompt_cached_count=live.reused_tokens,
             eval_duration=_seconds_to_ns(eval_duration),
             total_duration=_seconds_to_ns(load_duration + eval_duration),
             done_reason="stop" if ended_by_model or stops.stopped else "length",
