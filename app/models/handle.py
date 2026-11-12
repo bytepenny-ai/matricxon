@@ -7,6 +7,7 @@ from app.runtime.prompt_cache import PromptCache
 from app.runtime.sentencepiece_tokenizer import SentencePieceTokenizer
 from app.runtime.tokenizer import GGUFTokenizer
 from app.runtime.tool_call_formats import ToolCallFormat
+from app.runtime.unigram_tokenizer import UnigramTokenizer
 from app.runtime.wordpiece_tokenizer import WordPieceTokenizer
 
 # The tokenizers a GGUF's `tokenizer.ggml.model` can resolve to
@@ -14,7 +15,9 @@ from app.runtime.wordpiece_tokenizer import WordPieceTokenizer
 # SentencePiece BPE for "llama" (M10), Gemma4's rank-based BPE for "gemma4" (M10). They share no
 # base class (their capabilities differ: only the decoder tokenizers have an eos_token_id), so
 # callers narrow by the endpoint they serve.
-Tokenizer = GGUFTokenizer | WordPieceTokenizer | SentencePieceTokenizer | Gemma4Tokenizer
+Tokenizer = (
+    GGUFTokenizer | WordPieceTokenizer | SentencePieceTokenizer | Gemma4Tokenizer | UnigramTokenizer
+)
 
 
 @dataclass

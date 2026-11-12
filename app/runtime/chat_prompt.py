@@ -10,6 +10,7 @@ import torch
 from app.models.catalog import ModelCatalog
 from app.models.handle import ModelHandle
 from app.runtime.chat_log import ChatLog
+from app.runtime.gemma4_fusion import build_gemma4_prompt
 from app.runtime.prompt_builder import Mistral3PromptBuilder
 from app.runtime.qwen3vl_fusion import FusedPrompt, build_qwen3vl_prompt
 from app.runtime.vision_fusion import build_prompt_with_images
@@ -61,6 +62,15 @@ class ChatPrompt:
                 prompt, all_images, handle.tokenizer, mmproj, handle.architecture.device
             )
             prompt_token_ids, image_embeddings = fused.token_ids, fused.image_embeddings
+        elif mmproj is not None and handle.architecture.NAME == "gemma4":
+            prompt_token_ids, image_embeddings = build_gemma4_prompt(
+                prompt,
+                all_images,
+                handle.tokenizer,
+                mmproj,
+                prompt_builder.wants_bos(prompt),
+                handle.architecture.device,
+            )
         elif mmproj is not None:
             prompt_token_ids, image_embeddings = build_prompt_with_images(
                 prompt, all_images, handle.tokenizer, mmproj, handle.architecture.device

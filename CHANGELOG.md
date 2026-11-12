@@ -3,6 +3,14 @@
 Notable changes in each Matricxon release. Security fixes are marked **Security**. Full release notes and news:
 https://bytepenny.com/rss/
 
+## Unreleased
+
+- Gemma 4 reads images: put its image file (`mmproj-*.gguf`, e.g. `unsloth/gemma-4-E2B-it-GGUF:mmproj-F16`) next to the model and it reports `vision`. The `gemma4v` image encoder matches Hugging Face's to 4 decimals on three image shapes (tools/oracle/validate_gemma4_vision.py). Images use 70 tokens each.
+- A chat with an image is reused from the prompt cache for a model whose image placeholders are unique per picture (Gemma 4): the next message, even "OK", reads only what is new instead of the whole chat (163 of 174 tokens reused, 4 s instead of over a minute on a CPU). Encoded images are kept, so a picture sent again isn't re-encoded.
+
+- Multilingual embedding models: the SentencePiece Unigram tokenizer (`tokenizer.ggml.model = "t5"`) of XLM-RoBERTa encoders such as `paraphrase-multilingual-MiniLM-L12-v2`, `multilingual-e5` and `bge-m3`. Matches the Hugging Face tokenizer on Hebrew, Arabic, Russian, Japanese and English test sentences, and the model's vectors match the original at 0.99+ (Q4_K_M).
+- `GET /api/tags` and `/api/show` mark a model whose tokenizer Matricxon can't build with `tokenizer_unsupported`, instead of listing it as usable and failing on its first request.
+
 ## 2.1.2 (2026-11-11)
 
 - Wider CPU instructions in the native kernels (AVX2, VNNI, ARM dot product) are on by default for a fresh install (`MATRICXON_WIDE_SIMD`); a CPU without them uses the plain kernels, and an existing `.env` value is kept.

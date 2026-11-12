@@ -106,6 +106,7 @@ class TestVisionSupportedNames:
     def test_lists_only_the_architectures_that_really_fuse_images(self) -> None:
         assert ArchitectureRegistry().vision_supported_names() == [
             LlamaArchitecture.NAME,
+            Gemma4Architecture.NAME,
             Phi2Architecture.NAME,
             Qwen35Architecture.NAME,
         ]

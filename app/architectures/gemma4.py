@@ -38,6 +38,10 @@ class Gemma4Architecture(ModelArchitecture):
     """
 
     NAME = "gemma4"
+    # With a paired `gemma4v` mmproj (app.runtime.gemma4_fusion), whose image placeholder ids are
+    # unique per picture, so the prompt cache may reuse a prompt with images.
+    SUPPORTS_VISION = True
+    UNIQUE_IMAGE_IDS = True
     supports_context_shift = True
     SUPPORTS_GPU = True
     SUPPORTS_BATCHED_DECODE = True
@@ -350,7 +354,6 @@ class Gemma4Architecture(ModelArchitecture):
         stop_check: Callable[[], bool] | None = None,
         image_embeddings: list[tuple[int, torch.Tensor]] | None = None,
     ) -> torch.Tensor:
-        del image_embeddings
         _, seq_len = input_ids.shape
         logger.debug("forward start: seq_len=%d", seq_len)
         if position_ids is None:
@@ -365,7 +368,17 @@ class Gemma4Architecture(ModelArchitecture):
         logger.debug("embedding lookup: %.1fms", (time.monotonic() - stage_started) * 1000)
 
         # PLE: computed once, sliced per layer below (gemma4_ple.py). None if per_layer_dim==0.
-        per_layer_inputs = self.per_layer_embedding(input_ids, x) if self.per_layer_dim else None
+        # Image spans (gemma4_fusion.py) hold pad-token placeholders: the image's soft tokens
+        # replace their embedding, so the per-layer term gets the pad row's token identity and its
+        # context part from the image (HF: get_per_layer_inputs on the ids, then
+        # project_per_layer_inputs on the final inputs_embeds).
+        token_ids = input_ids
+        if image_embeddings:
+            token_ids = input_ids.clone()
+            for start, embeds in image_embeddings:
+                x[:, start : start + embeds.shape[0], :] = embeds.to(x.dtype)
+                token_ids[:, start : start + embeds.shape[0]] = 0  # read as <pad>
+        per_layer_inputs = self.per_layer_embedding(token_ids, x) if self.per_layer_dim else None
 
         # Cross-layer KV reuse: filled by each provider layer as it runs (Gemma4Attention), read by
         # later shared layers; never persisted across calls.

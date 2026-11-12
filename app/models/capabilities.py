@@ -4,6 +4,7 @@ from app.architectures.registry import (
     unsupported_features,
 )
 from app.models.installed_model import InstalledModel
+from app.models.tokenizer_dispatch import tokenizer_supported
 from app.models.tool_support import supports_thinking, supports_tools, thinking_rereads
 from app.runtime.chat_template import has_confirmed_chat_format
 
@@ -74,9 +75,15 @@ def effective_capabilities(installed: InstalledModel, has_paired_mmproj: bool) -
     - `"tools"` when the chat template shows a tool-call format matricxon can parse
       (`app.runtime.tool_call_formats`).
     - `"thinking"` when the chat template has an `enable_thinking` switch (ChatRequest.think).
+    - `"tokenizer_unsupported"` (and nothing else added) when the GGUF's tokenizer type isn't one
+      matricxon can build (`app.models.tokenizer_dispatch.tokenizer_supported`).
     - `"thinking_rereads"` when flipping that switch changes the history part of the prompt (Gemma
       4), so a live chat is read again once; pAIring warns before the change.
     """
+    if not tokenizer_supported(installed.path):
+        # It would fail on its first request (an embedding model with an unknown tokenizer once
+        # looked usable); pAIring shows it as unavailable.
+        return [*installed.capabilities, "tokenizer_unsupported"]
     if is_scoring_model(installed.path):
         # A reranker scores (POST /api/rerank); it can't chat or embed.
         return ["rerank"]

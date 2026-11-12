@@ -143,7 +143,7 @@ class ChatEngine:
             prompt_ids,
             sampling.num_ctx,
             model_dtype,
-            reusable=request.image_embeddings is None,
+            reusable=request.image_embeddings is None or self._architecture.UNIQUE_IMAGE_IDS,
             tag=request.cache_tag,
         )
         # Said before the prefill starts, so a long (or cancelled) prefill is explained too.
@@ -173,9 +173,10 @@ class ChatEngine:
         self._live.prefill(reused, self._profiler())
         try:
             forward_started = time.monotonic()
-            cuts = self._prefill_cuts(
-                kv_cache, reused, prompt_len, request.image_embeddings is not None
+            single_piece = (
+                request.image_embeddings is not None and not self._architecture.UNIQUE_IMAGE_IDS
             )
+            cuts = self._prefill_cuts(kv_cache, reused, prompt_len, single_piece)
             start = reused
             for end in cuts:
                 positions = (

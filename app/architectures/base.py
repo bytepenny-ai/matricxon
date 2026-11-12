@@ -52,6 +52,9 @@ class ModelArchitecture(DevicePlacement, PackedWeightLoading, nn.Module, ABC):
     # (`ArchitectureRegistry.vision_supported_names`; `capabilities.py` derives "vision" from the
     # same set).
     SUPPORTS_VISION: ClassVar[bool] = False
+    # True when its image fusion gives each picture its own placeholder ids (gemma4_fusion.py): the
+    # prompt cache may then reuse a prompt with images, and it may be read in chunks.
+    UNIQUE_IMAGE_IDS: ClassVar[bool] = False
     # True for an architecture whose forward pass gives the same logits for a decode step run in a
     # batch of
     # sequences (`app.runtime.batch_decode`, `batch_cache`) as alone; checked per architecture in
