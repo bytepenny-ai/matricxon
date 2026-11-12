@@ -59,6 +59,8 @@ class ModelHandle:
     pinned: bool = False
     # Its weights are on a GPU (else in RAM): each model's own place (app.models.placement).
     on_gpu: bool = False
+    # Its weights were copied into RAM at load (a pinned model; app.gguf.mmap_source), not mapped.
+    resident: bool = False
 
     @property
     def expires_at(self) -> float:

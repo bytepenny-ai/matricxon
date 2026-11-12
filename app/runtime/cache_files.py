@@ -24,6 +24,11 @@ class StoredEntry:
     blocks: list[str]
     saved_at: float
     tag: str = ""
+    # A chat is saved as a chain (cache_chain.py): a full base (seq 0), then pieces adding only the
+    # tokens from `start` on. A file from before chains has no `chain`: a chain of its own.
+    chain: str = ""
+    seq: int = 0
+    start: int = 0
     size: int = 0
 
     def describe(self) -> str:
@@ -49,7 +54,7 @@ class CacheFilesBase:
     _index: dict[str, StoredEntry]
     _forgotten: set[str]
     _writer: ThreadPoolExecutor
-    _checkpoints: dict[tuple[str, str], SlotState]
+    _checkpoints: dict[tuple[str, str], tuple[SlotState, object]]  # (state, its slot)
     _spills_pending: int
     _last_scan: float
 

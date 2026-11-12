@@ -97,7 +97,8 @@ def test_saves_wait_for_the_interval(
     clock.now += 30
     _reply(llama, pool, turn2 + reply2 + [7])
     store.flush()
-    assert store.usage()[0] == 1 and store.usage()[1] > first  # the newer copy replaced it
+    # The newer state is a piece after the first copy (cache_chain.py): one chat, two files.
+    assert store.usage()[0] == 2 and store.chat_count() == 1 and store.usage()[1] > first
 
 
 def test_zero_saves_only_when_the_chat_leaves_ram(

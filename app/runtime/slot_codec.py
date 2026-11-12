@@ -72,12 +72,70 @@ class SlotCodec:
         )
 
     @staticmethod
+    def serialize_piece(state: SlotState, start: int) -> EncodedSlot:
+        """Only the tokens from `start` on (a chain's piece, cache_chain.py): their ids and their
+        keys/values. `token_ids` stays the whole list, for the file's header (length, matching)."""
+        tensors = state.tensors
+        piece = {
+            "start": start,
+            "token_ids": tensors["token_ids"][start:],
+            "prompt_len": tensors["prompt_len"],
+            "keys": [k[:, :, start:, :].clone() for k in tensors["keys"]],
+            "values": [v[:, :, start:, :].clone() for v in tensors["values"]],
+            "snapshots": [],
+        }
+        buffer = io.BytesIO()
+        torch.save(piece, buffer)
+        return EncodedSlot(tensors["token_ids"], state.num_ctx, state.dtype_name, buffer.getvalue())
+
+    @staticmethod
+    def join(payloads: list[bytes]) -> dict:
+        """A base and its pieces, in order, as one saved state. Raises `ValueError` unless each
+        piece starts exactly where the state so far ends and its sizes agree."""
+        if not payloads:
+            raise ValueError("no saved parts")
+        load = lambda p: torch.load(io.BytesIO(p), weights_only=True, map_location="cpu")  # noqa: E731
+        state = load(payloads[0])
+        if state.get("start", 0) != 0:
+            raise ValueError("a chain must begin with its full copy")
+        for payload in payloads[1:]:
+            piece = load(payload)
+            length = len(state["token_ids"])
+            added = len(piece["token_ids"])
+            if state["snapshots"] or piece.get("start") != length or added == 0:
+                raise ValueError("a saved piece doesn't continue the chat")
+            if len(piece["keys"]) != len(state["keys"]) or len(piece["values"]) != len(
+                state["values"]
+            ):
+                raise ValueError("a saved piece has a different number of layers")
+            for part in (*piece["keys"], *piece["values"]):
+                if part.shape[2] != added:
+                    raise ValueError("a saved piece's sizes disagree")
+            state["keys"] = [
+                torch.cat([k, p.to(k.dtype)], dim=2)
+                for k, p in zip(state["keys"], piece["keys"], strict=True)
+            ]
+            state["values"] = [
+                torch.cat([v, p.to(v.dtype)], dim=2)
+                for v, p in zip(state["values"], piece["values"], strict=True)
+            ]
+            state["token_ids"] = [*state["token_ids"], *piece["token_ids"]]
+            state["prompt_len"] = piece["prompt_len"]
+        if state["keys"] and state["keys"][0].shape[2] != len(state["token_ids"]):
+            raise ValueError("a saved cache's tokens and keys disagree")
+        return state
+
+    @staticmethod
     def decode(
-        payload: bytes, architecture: ModelArchitecture, num_ctx: int, dtype: torch.dtype
+        payload: bytes | list[bytes],
+        architecture: ModelArchitecture,
+        num_ctx: int,
+        dtype: torch.dtype,
     ) -> CacheSlot:
-        """Rebuilds the slot on a fresh cache from `architecture`. Raises `ValueError` if it doesn't
-        fit this model (a stale save); the caller treats it as a miss."""
-        state = torch.load(io.BytesIO(payload), weights_only=True, map_location="cpu")
+        """Rebuilds the slot on a fresh cache from `architecture`, from one file or a chain's parts
+        in order (`join`). Raises `ValueError` if it doesn't fit this model (a stale save) or the
+        parts don't fit together; the caller treats it as a miss."""
+        state = SlotCodec.join(payload if isinstance(payload, list) else [payload])
         cache = architecture.build_cache(max_seq_len=num_ctx, dtype=dtype)
         snapshots = {
             # Converted like the KV in `cache.load`: the model may have loaded in another precision.

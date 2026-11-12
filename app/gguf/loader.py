@@ -18,11 +18,13 @@ class GGUFModelLoader:
     vision tower's weights) is never read or dequantized.
     """
 
-    def __init__(self, path: Path, dtype: torch.dtype = torch.bfloat16) -> None:
+    def __init__(
+        self, path: Path, dtype: torch.dtype = torch.bfloat16, resident: bool = False
+    ) -> None:
         self._path = path
         self._dtype = dtype
         self._parsed = GGUFReader(path).read()
-        self._mmap = GGUFMemoryMap(path)
+        self._mmap = GGUFMemoryMap(path, resident=resident)  # resident: kept in RAM (pinned)
         self._registry = QuantStrategyRegistry()
         self._tensor_infos_by_name = {t.name: t for t in self._parsed.tensor_infos}
 

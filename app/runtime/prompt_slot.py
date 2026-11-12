@@ -21,6 +21,9 @@ class CacheSlot:
     tag: str = ""
     saved_digest: int | None = None  # `digest()` of the state last copied to disk (cache_tier.py)
     saved_at: float = float("-inf")  # time.monotonic() of that copy
+    # What is on disk for this slot (cache_chain.PersistedChain), set by the store's writer thread
+    # only: the next save adds just a piece after it. A fork or a restore starts without one.
+    persisted: object | None = None
 
     def digest(self) -> int:
         return hash((tuple(self.token_ids), tuple(self.snapshots)))

@@ -162,7 +162,9 @@ class HandleBuilder:
         # bytes until the first forward pass (ModelArchitecture._ensure_materialized), so the mmap
         # behind `loader` must stay open past this method; ownership passes to `architecture` once
         # from_gguf succeeds. If anything fails first, this closes it here instead of leaking it.
-        loader = GGUFModelLoader(gguf_path, dtype=loader_dtype)
+        # A pinned model on the CPU is copied into RAM, never read from disk again (mmap_source.py).
+        resident = tag in self._settings.model_memory and not on_gpu
+        loader = GGUFModelLoader(gguf_path, dtype=loader_dtype, resident=resident)
         try:
             # See Settings.enable_quantized_native_compute: only architectures in
             # QUANTIZED_NATIVE_WIRED_ARCHITECTURES accept this kwarg today.
@@ -201,6 +203,7 @@ class HandleBuilder:
             capabilities=installed.capabilities,
             size_bytes=installed.size_bytes,
             on_gpu=on_gpu,
+            resident=resident,
             keep_alive_seconds=(
                 keep_alive_seconds
                 if keep_alive_seconds is not None

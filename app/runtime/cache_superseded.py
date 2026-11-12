@@ -8,6 +8,7 @@ class _StoredEntry(Protocol):
     blocks: list[str]
     saved_at: float
     tag: str
+    chain: str
 
 
 class SupersededCopies:
@@ -17,7 +18,8 @@ class SupersededCopies:
     (one chat showed as several "saved chats"). Every older copy of the same chat and model is
     superseded, in either precision: the newest state is the one worth restoring. That includes
     another branch (a message since deleted or edited, about 160 MB each for a 5000-token chat),
-    which the chat never goes back to.
+    which the chat never goes back to. Files of the new file's own chain are never superseded: a
+    piece needs its base and the pieces before it (cache_chain.py).
     """
 
     @staticmethod
@@ -33,6 +35,7 @@ class SupersededCopies:
             and old.tag == new.tag
             and old.model_id == new.model_id
             and old.saved_at <= new.saved_at
+            and not (new.chain and old.chain == new.chain)
         ]
 
     @staticmethod

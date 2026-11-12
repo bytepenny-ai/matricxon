@@ -173,12 +173,15 @@ class ModelPins:
         """True while the model sits in the other memory and is busy (checked again soon); when it
         is idle it is unloaded here, so the attempt loads it in the right place."""
         handle = next((h for h in self._manager.list_loaded() if h.tag == state.tag), None)
-        if handle is None or not ModelPlacement.misplaced(state.memory, handle.on_gpu):
+        # Loaded before it was pinned, so mapped from disk: load it again, copied into RAM.
+        mapped = handle is not None and not handle.on_gpu and not handle.resident
+        if handle is None or not (ModelPlacement.misplaced(state.memory, handle.on_gpu) or mapped):
             return False
         if handle.worker.is_busy():
             state.next_try = self._clock() + 5.0
             return True
-        logger.info("moving pinned model %s to %s", state.tag, state.memory.upper())
+        where = "RAM to stay" if mapped else state.memory.upper()
+        logger.info("moving pinned model %s to %s", state.tag, where)
         self._manager.unload(state.tag)
         return False
 

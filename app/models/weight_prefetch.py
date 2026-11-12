@@ -17,12 +17,15 @@ IDLE_SECONDS_BEFORE_PREFETCH = 60.0
 
 class WeightPrefetch:
     _running: set[Path] = set()
+    _resident: set[Path] = set()
     _lock = threading.Lock()
 
     @classmethod
     def start(cls, path: Path) -> bool:
         """Starts reading `path` ahead in a background thread; False when unsupported (not Linux)
         or already running for this file."""
+        if Path(path) in cls._resident:
+            return False
         if not hasattr(os, "posix_fadvise"):
             return False
         with cls._lock:
@@ -31,6 +34,12 @@ class WeightPrefetch:
             cls._running.add(path)
         threading.Thread(target=cls._run, args=(path,), name="weight-prefetch", daemon=True).start()
         return True
+
+    @classmethod
+    def mark_resident(cls, path: Path, resident: bool) -> None:
+        """A pinned model's file copied into RAM (app.gguf.mmap_source): nothing to prefetch."""
+        with cls._lock:
+            (cls._resident.add if resident else cls._resident.discard)(Path(path))
 
     @classmethod
     def after_idle(cls, path: Path, idle_seconds: float) -> bool:

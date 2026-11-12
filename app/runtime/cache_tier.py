@@ -45,7 +45,7 @@ class ModelCacheTier:
         state = SlotCodec.capture(slot)
         if state is not None:
             slot.saved_digest, slot.saved_at = digest, time.monotonic()
-            self._store.checkpoint_async(self._model_id, state, slot.tag)
+            self._store.checkpoint_async(self._model_id, state, slot.tag, slot)
 
     def restore(
         self,
@@ -61,7 +61,7 @@ class ModelCacheTier:
         taken = self._store.take(self._model_id, prompt_ids, dtype, min_tokens, tag)
         if taken is None:
             return None
-        payload, tag = taken
+        payload, tag = taken  # a chain's parts, base first (cache_chain.py)
         try:
             slot = SlotCodec.decode(payload, architecture, num_ctx, dtype)
         except (ValueError, KeyError, RuntimeError):

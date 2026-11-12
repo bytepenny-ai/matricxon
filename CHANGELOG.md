@@ -5,6 +5,10 @@ https://bytepenny.com/rss/
 
 ## Unreleased
 
+- Saved prompt caches grow by pieces: after a reply only the new tokens are written to disk, not the whole chat again (a 2,500-token Gemma 4 chat rewrote about 225 MB per reply; a short reply's piece is a few MB). A chat is a chain of one full copy and up to 8 pieces; a new full copy is written when the pieces reach half the base, the chat's start changed (an edit, a rewind, a trimmed history), the chain isn't whole on disk, or the model keeps a recurrent state. Restores need the whole chain, checked piece by piece; limits remove chains whole; a chain missing a piece is cleaned after 10 minutes. Files saved before still restore.
+
+- A pinned model on the CPU is copied into RAM when it loads, instead of being mapped from its file, so its weights are never read from disk again. Mapped pages are dropped when RAM is tight, and reading them back from a slow disk (a USB stick behind NFS) made a short reply wait about a minute. A model loaded before it was pinned is loaded again into RAM once its replies are done.
+
 - A reply whose client disconnects stops its work: it used to keep reading a long prompt for minutes (a deleted chat's reply kept both CPU cores busy). Every reply now gets an id to stop it by.
 
 - While a long prompt is still being read, `POST /api/chat` streams a `prompt_progress` line (tokens from the cache, tokens read so far, the layer being read) each time the read moves on, so a client can tell a slow read from a stuck one. The final line adds `prompt_cached_count`: of `prompt_eval_count`, the tokens reused from the prompt cache.

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from app.runtime.cache_chain import ChainIndex
 from app.runtime.cache_crypto import CacheCipher, CacheDecryptError
 from app.runtime.cache_files import MAGIC, SUFFIX, StoredEntry
 from app.runtime.cache_limits import CacheLimits
@@ -185,7 +186,8 @@ class PersistentCacheStore(CacheWriter, CacheReader, CacheLimits):
         """Distinct chats with a saved copy (one chat can have several files, e.g. branches)."""
         self._rescan_if_due()
         with self._lock:
-            return SupersededCopies.chat_count(list(self._index.values()))
+            items = list(self._index.items())
+        return SupersededCopies.chat_count(e for _g, _n, e in ChainIndex.heads(items))
 
     def usage(self) -> tuple[int, int]:
         """(files, total bytes) currently stored."""
