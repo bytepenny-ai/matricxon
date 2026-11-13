@@ -51,6 +51,16 @@ class ChatOptions(BaseModel):
     stop: list[str] | None = Field(default=None, max_length=8)
 
 
+class CacheReuse(BaseModel):
+    """How much of a cached conversation a prompt may reuse (app.runtime.block_reuse). "exact":
+    only the prefix it shares, exact. "blocks": also the unchanged parts after a change (a note
+    edited in the middle), copied with re-rotated keys: approximate, but not re-read."""
+
+    mode: Literal["exact", "blocks"] = "exact"
+    # The shortest run of equal tokens worth copying.
+    min_tokens: int = Field(32, ge=8, le=4096)
+
+
 class ChatRequest(BaseModel):
     model: str
     messages: list[ChatMessage]
@@ -73,6 +83,7 @@ class ChatRequest(BaseModel):
     # Cached prompts carry it so `DELETE /api/cache/persistence/chats/{tag}` can drop a deleted
     # chat's stored cache; never shown or used for matching.
     cache_tag: str | None = None
+    cache_reuse: CacheReuse = CacheReuse()
     # "vision" when pAIring asks for its default vision model (an image attachment): that model then
     # doesn't count toward max_loaded_models (app.models.load_limit). None: a normal chat model.
     model_role: str | None = None

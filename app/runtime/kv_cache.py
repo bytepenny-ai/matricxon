@@ -98,6 +98,40 @@ class KVCache:
             ].clone()
         self._length = end - count
 
+    def write_ahead(
+        self,
+        dst_start: int,
+        source: "KVCache",
+        src_start: int,
+        count: int,
+        rotations: list[tuple[torch.Tensor, torch.Tensor]] | None,
+    ) -> None:
+        """Copies `source`'s positions `[src_start, src_start + count)` to `[dst_start, ...)` here,
+        past the committed length (block reuse, block_reuse.py): `advance` commits them once the
+        tokens before are read. `rotations` (`context_shift_rotations(src_start - dst_start)`)
+        move the keys to their new position; None when it is the same."""
+        end = dst_start + count
+        if (
+            dst_start < self._length
+            or count <= 0
+            or end > self._max_seq_len
+            or src_start < 0
+            or src_start + count > source.length
+            or source._layer_shapes != self._layer_shapes
+            or (rotations is not None and len(rotations) != len(self._k))
+        ):
+            raise ValueError(f"can't copy {count} positions from {src_start} to {dst_start}")
+        for layer in range(len(self._k)):
+            keys = source._k[layer][:, :, src_start : src_start + count, :]
+            if rotations is not None:
+                cos, sin = rotations[layer]
+                moved = keys.float()
+                keys = moved * cos.to(moved.device) + rotate_half(moved) * sin.to(moved.device)
+            self._k[layer][:, :, dst_start:end, :] = keys.to(self._dtype)
+            self._v[layer][:, :, dst_start:end, :] = source._v[layer][
+                :, :, src_start : src_start + count, :
+            ].to(self._dtype)
+
     def fork(self, length: int, max_seq_len: int | None = None) -> "KVCache":
         """A new cache holding a copy of the first `length` positions; this one is untouched. Cheap
         next to recomputing: how `PromptCache` lets a second conversation build on a shared prefix

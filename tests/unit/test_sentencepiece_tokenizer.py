@@ -114,3 +114,26 @@ class TestDecode:
         token_id = tokenizer._token_to_id["<0x41>"]
 
         assert tokenizer.token_to_bytes(token_id) == b"A"
+
+
+class TestNoByteFallback:
+    def test_a_character_without_a_piece_or_byte_token_becomes_unk(self) -> None:
+        metadata = _build_metadata()
+        keep = [
+            i for i, kind in enumerate(metadata.require("tokenizer.ggml.token_type")) if kind != 6
+        ]
+        values = {
+            key: [metadata.require(key)[i] for i in keep]
+            for key in (
+                "tokenizer.ggml.tokens",
+                "tokenizer.ggml.scores",
+                "tokenizer.ggml.token_type",
+            )
+        }
+        tokenizer = SentencePieceTokenizer(
+            GGUFMetadata(
+                {**values, "tokenizer.ggml.bos_token_id": 1, "tokenizer.ggml.unknown_token_id": 0}
+            )
+        )
+
+        assert [tokenizer._id_to_token[i] for i in tokenizer.encode("hi\n")] == ["▁hi", "<unk>"]

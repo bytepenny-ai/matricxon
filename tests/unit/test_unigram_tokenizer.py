@@ -77,6 +77,13 @@ def test_dispatch_builds_it_for_t5():
     assert isinstance(build_tokenizer(_metadata()), UnigramTokenizer)
 
 
+def test_dispatch_builds_it_for_a_llama_labeled_vocab_without_byte_tokens():
+    # cstr's multilingual-e5-small GGUF: an XLM-R Unigram vocab its converter labeled "llama".
+    tokenizer = build_tokenizer(_metadata(**{"tokenizer.ggml.model": "llama"}))
+    assert isinstance(tokenizer, UnigramTokenizer)
+    assert tokenizer.encode("hi\nhi") == [0, *_ids("▁hi", "▁hi"), 2]  # a newline is a space here
+
+
 @pytest.mark.parametrize(
     ("model", "supported"), [("t5", True), ("bert", True), ("rwkv", False), (None, True)]
 )

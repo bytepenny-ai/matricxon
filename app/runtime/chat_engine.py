@@ -6,6 +6,7 @@ import torch
 
 from app.architectures.base import GenerationCancelledError, ModelArchitecture
 from app.runtime.batch_decode import CHECKPOINT, BatchDecoder, Checkpoint, DecodeStep
+from app.runtime.block_reuse import PrefillStep
 from app.runtime.generation_request import GenerationRequest, GenerationResult
 from app.runtime.live_requests import LiveRegistry, LiveRequest
 from app.runtime.mamba_cache import NemotronHHybridCache
@@ -145,14 +146,20 @@ class ChatEngine:
             model_dtype,
             reusable=request.image_embeddings is None or self._architecture.UNIQUE_IMAGE_IDS,
             tag=request.cache_tag,
+            block_min=request.block_reuse_min if request.position_ids is None else 0,
         )
+        # Read now: the pool is shared, and another reply's acquire replaces it after a yield.
+        steps = self._prompt_cache.prefill_steps or [PrefillStep(reused, prompt_len, False)]
+        from_cache = reused + sum(
+            s.end - s.start for s in steps if s.copied
+        )  # block reuse copies count too
         # Said before the prefill starts, so a long (or cancelled) prefill is explained too.
-        if reused > 0:
+        if from_cache > 0:
             logger.info(
                 "prompt cache: reusing %d of %d tokens, prefilling the other %d",
-                reused,
+                from_cache,
                 prompt_len,
-                prompt_len - reused,
+                prompt_len - from_cache,
             )
         elif prompt_len > 1:
             logger.info(
@@ -170,41 +177,47 @@ class ChatEngine:
         materialize = getattr(self._architecture, "_ensure_materialized", None)
         if materialize is not None:
             materialize(stop_check)
-        self._live.prefill(reused, self._profiler())
+        self._live.prefill(from_cache, self._profiler())
         try:
             forward_started = time.monotonic()
             single_piece = (
                 request.image_embeddings is not None and not self._architecture.UNIQUE_IMAGE_IDS
             )
-            cuts = self._prefill_cuts(kv_cache, reused, prompt_len, single_piece)
-            start = reused
-            for end in cuts:
-                positions = (
-                    request.position_ids[:, start:end]
-                    if request.position_ids is not None
-                    else torch.arange(start, end, dtype=torch.long)
-                )
-                with torch.no_grad():
-                    logits = self._architecture.forward(
-                        request.input_ids[:, start:end],
-                        kv_cache,
-                        positions,
-                        stop_check,
-                        self._images_in(request.image_embeddings, start, end),
-                        last_logits_only=True,
+            read = 0
+            for step in steps:
+                if step.copied:  # block reuse: already in the cache past its length
+                    kv_cache.advance(step.end - step.start)
+                    self._prompt_cache.advanced(kv_cache, prompt_ids[step.start : step.end])
+                    continue
+                start = step.start
+                for end in self._prefill_cuts(kv_cache, step.start, step.end, single_piece):
+                    positions = (
+                        request.position_ids[:, start:end]
+                        if request.position_ids is not None
+                        else torch.arange(start, end, dtype=torch.long)
                     )
-                StageProfiler.of(self._architecture).forward_finished()
-                kv_cache.advance(end - start)
-                self._prompt_cache.advanced(kv_cache, prompt_ids[start:end])
-                self._prompt_cache.capture(kv_cache)
-                self._live.prefilled(end - reused)
-                start = end
-                if end != cuts[-1]:
-                    yield CHECKPOINT
+                    with torch.no_grad():
+                        logits = self._architecture.forward(
+                            request.input_ids[:, start:end],
+                            kv_cache,
+                            positions,
+                            stop_check,
+                            self._images_in(request.image_embeddings, start, end),
+                            last_logits_only=True,
+                        )
+                    StageProfiler.of(self._architecture).forward_finished()
+                    kv_cache.advance(end - start)
+                    self._prompt_cache.advanced(kv_cache, prompt_ids[start:end])
+                    self._prompt_cache.capture(kv_cache)
+                    read += end - start
+                    self._live.prefilled(read)  # tokens actually read (a client's read speed)
+                    start = end
+                    if end != prompt_len:
+                        yield CHECKPOINT
             logger.info(
                 "prefill forward: %d prompt tokens (%d reused from the cache) in %.2fs",
                 prompt_len,
-                reused,
+                from_cache,
                 time.monotonic() - forward_started,
             )
 

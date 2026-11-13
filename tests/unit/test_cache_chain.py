@@ -74,13 +74,14 @@ def _chat(store: cache_store.PersistentCacheStore, tokens: int = 64) -> CacheSlo
 def test_a_growing_chat_adds_small_pieces_and_restores_exactly(tmp_path: Path) -> None:
     store = _store(tmp_path)
     slot = _chat(store)
-    base_size = _files(tmp_path)[0].stat().st_size
+    (base,) = _files(tmp_path)
     for _ in range(3):
         _grow(slot, 4)
         _save(store, slot)
     files = _files(tmp_path)
     assert len(files) == 4 and store.chat_count() == 1
-    assert all(f.stat().st_size < base_size / 3 for f in files[1:])  # only the new tokens
+    # only the new tokens; the base by name (files saved in one clock tick share an mtime)
+    assert all(f.stat().st_size < base.stat().st_size / 3 for f in files if f != base)
 
     restored = _restore(store, slot.token_ids)
     assert restored is not None and restored.token_ids == slot.token_ids

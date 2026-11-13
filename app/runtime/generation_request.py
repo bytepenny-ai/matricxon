@@ -46,6 +46,8 @@ class GenerationRequest:
     position_ids: torch.Tensor | None = None
     position_delta: int = 0
     cache_tag: str = ""
+    # Block reuse (block_reuse.py): copy cached runs of at least this many tokens; 0 is off.
+    block_reuse_min: int = 0
     # Limits which tokens may come next (structured output: app.runtime.json_constraint).
     constraint: "TokenConstraint | None" = None
 

@@ -7,6 +7,7 @@ from typing import Concatenate, ParamSpec, TypeVar
 import torch
 
 from app.architectures.base import ModelArchitecture
+from app.runtime.block_reuse import BlockAssembler
 from app.runtime.cache_miss_diagnosis import CacheMissDiagnosis
 from app.runtime.cache_tier import ModelCacheTier
 from app.runtime.prompt_slot import CacheSlot
@@ -39,6 +40,10 @@ class PromptCacheChats:
     _slots: list[CacheSlot]
     _tier: ModelCacheTier | None
     _lock: threading.RLock
+    _add: Callable[[CacheSlot], CacheSlot]
+    CONTINUATION_TAIL_TOKENS: int
+    reused_tokens: int
+    prefill_steps: list
 
     def _shift_trimmed_chat(
         self,
@@ -75,6 +80,53 @@ class PromptCacheChats:
             keep,
             run,
         )
+
+    def _assemble_blocks(
+        self,
+        architecture: ModelArchitecture,
+        prompt_ids: list[int],
+        key: tuple[int, torch.dtype],
+        best: CacheSlot | None,
+        n: int,
+        tag: str,
+        min_run: int,
+    ) -> tuple[object, int] | None:
+        """Block reuse (block_reuse.py): a new slot with the prefix and the runs copied from the
+        pool, its steps in `prefill_steps`; None when nothing is worth copying."""
+        if not architecture.supports_context_shift or len(prompt_ids) - 1 - n < min_run:
+            return None
+        if best is not None and best.hybrid:
+            return None
+        # A chat that only continues (nothing cached past the match but the end of its last turn)
+        # has nothing to copy from its own conversation: no search, it costs a pass over the pool.
+        continues = (
+            best is not None
+            and best.tag == tag
+            and n >= len(best.token_ids) - self.CONTINUATION_TAIL_TOKENS
+        )
+        if continues:
+            return None
+        made = BlockAssembler(architecture, min_run).assemble(
+            self._slots, best, n, prompt_ids, key, tag
+        )
+        if made is None:
+            return None
+        slot, steps, copied = made
+        slot.prompt_len = len(prompt_ids)
+        slot.in_use = True
+        slot.tag = tag or slot.tag
+        self._add(slot)
+        self.reused_tokens = n + copied
+        self.prefill_steps = steps
+        logger.info(
+            "block reuse: kept the first %d tokens, copied %d more in %d runs, reading %d of %d",
+            n,
+            copied,
+            sum(1 for s in steps if s.copied),
+            len(prompt_ids) - n - copied,
+            len(prompt_ids),
+        )
+        return slot.cache, n
 
     def _explain_miss(self, prompt_ids: list[int], key: tuple[int, torch.dtype], tag: str) -> str:
         parts = [CacheMissDiagnosis.ram(self._slots, prompt_ids, key, tag)]

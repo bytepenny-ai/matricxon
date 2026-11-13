@@ -7,13 +7,21 @@ from pathlib import Path
 from transformers import AutoTokenizer
 
 from app.gguf.reader import GGUFReader
-from app.runtime.unigram_tokenizer import UnigramTokenizer
+from app.models.tokenizer_dispatch import build_tokenizer
 
-_GGUF = Path(
-    "/mnt/mxshared/matricxon/hf.co/mykor/paraphrase-multilingual-MiniLM-L12-v2.gguf/"
-    "paraphrase-multilingual-MiniLM-L12-118M-v2-Q4_K_M.gguf"
-)
-_HF_REPO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+# (GGUF, HF repo), built through build_tokenizer: e5's "llama"-labeled Unigram vocab is covered too.
+_MODELS = [
+    (
+        "hf.co/mykor/paraphrase-multilingual-MiniLM-L12-v2.gguf/"
+        "paraphrase-multilingual-MiniLM-L12-118M-v2-Q4_K_M.gguf",
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    ),
+    (
+        "hf.co/cstr/multilingual-e5-small-GGUF/multilingual-e5-small-iq4_xs.gguf",
+        "intfloat/multilingual-e5-small",
+    ),
+]
+_ROOTS = [Path("/mnt/mxshared/matricxon"), Path("/media/home/models/matricxon")]
 _PROMPTS = [
     "Hello, world!",
     "what kind of a bird is that?",
@@ -34,11 +42,19 @@ _PROMPTS = [
 
 
 def main() -> int:
-    if not _GGUF.exists():
-        print(f"[SKIP] model not present on this machine: {_GGUF}")
-        return 0
-    ours = UnigramTokenizer(GGUFReader(_GGUF).read().metadata)
-    hf = AutoTokenizer.from_pretrained(_HF_REPO)
+    failed = 0
+    for relative, repo in _MODELS:
+        gguf = next((root / relative for root in _ROOTS if (root / relative).exists()), None)
+        if gguf is None:
+            print(f"[SKIP] model not present on this machine: {relative}")
+            continue
+        print(f"== {repo}")
+        ours = build_tokenizer(GGUFReader(gguf).read().metadata)
+        failed += _check(ours, AutoTokenizer.from_pretrained(repo))
+    return 1 if failed else 0
+
+
+def _check(ours, hf) -> int:
     failed = 0
     for prompt in _PROMPTS:
         our_ids, hf_ids = ours.encode(prompt), hf(prompt)["input_ids"]
@@ -50,7 +66,7 @@ def main() -> int:
             print(f"  ours: {hf.convert_ids_to_tokens(our_ids)}")
             print(f"  hf:   {hf.convert_ids_to_tokens(hf_ids)}")
     print(f"{len(_PROMPTS) - failed}/{len(_PROMPTS)} match")
-    return 1 if failed else 0
+    return failed
 
 
 if __name__ == "__main__":

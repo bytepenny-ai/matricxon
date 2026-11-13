@@ -43,6 +43,9 @@ class ChatGeneration:
             position_ids=fused.position_ids if fused else None,
             position_delta=fused.position_delta if fused else 0,
             cache_tag=request.cache_tag or "",
+            block_reuse_min=(
+                request.cache_reuse.min_tokens if request.cache_reuse.mode == "blocks" else 0
+            ),
             sampling=SamplingConfig(
                 temperature=options.temperature,
                 top_p=options.top_p,

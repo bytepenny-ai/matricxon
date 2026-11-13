@@ -17,8 +17,12 @@ def build_tokenizer(metadata: GGUFMetadata) -> Tokenizer:
     encoder models (checked against their GGUF metadata), `"llama"` for the
     SentencePiece-BPE of plain `llama`-arch models (M10, checked on a TinyLlama pull), `"gemma4"`
     for Gemma4's rank-based BPE without byte-remapping (M10, checked on a `google/gemma-4-12b-it`
-    pull)."""
+    pull). A `"llama"` vocab with no byte tokens is Unigram mislabeled by an older converter (an
+    XLM-RoBERTa encoder such as cstr's multilingual-e5-small): SentencePiece-BPE always has its 256
+    byte-fallback tokens, and its scores are the Unigram log-probabilities."""
     tokenizer_model = metadata.require("tokenizer.ggml.model")
+    if tokenizer_model == "llama" and not _has_byte_tokens(metadata):
+        return UnigramTokenizer(metadata)
     if tokenizer_model == "gpt2":
         return GGUFTokenizer(metadata)
     if tokenizer_model == "bert":
@@ -34,6 +38,11 @@ def build_tokenizer(metadata: GGUFMetadata) -> Tokenizer:
     raise UnsupportedArchitectureError(f"Unsupported tokenizer.ggml.model: {tokenizer_model!r}")
 
 
+def _has_byte_tokens(metadata: GGUFMetadata) -> bool:
+    return _BYTE_TOKEN_TYPE in metadata.require("tokenizer.ggml.token_type")
+
+
+_BYTE_TOKEN_TYPE = 6
 # Every `tokenizer.ggml.model` build_tokenizer handles.
 SUPPORTED_TOKENIZERS = frozenset({"gpt2", "bert", "llama", "gemma4", "t5"})
 _supported_cache: dict[tuple[str, int, int], bool] = {}

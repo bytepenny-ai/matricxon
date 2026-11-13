@@ -46,6 +46,7 @@ class SentencePieceTokenizer:
         )
 
         self.bos_token_id: int | None = metadata.get("tokenizer.ggml.bos_token_id")
+        self._unk_token_id: int | None = metadata.get("tokenizer.ggml.unknown_token_id")
         self.eos_token_id: int | None = metadata.get("tokenizer.ggml.eos_token_id")
 
     def encode(self, text: str, add_bos: bool = False) -> list[int]:
@@ -110,7 +111,11 @@ class SentencePieceTokenizer:
         token_id = self._token_to_id.get(symbol)
         if token_id is not None:
             return [token_id]
-        return [self._byte_token_ids[b] for b in symbol.encode("utf-8")]
+        if all(b in self._byte_token_ids for b in symbol.encode("utf-8")):
+            return [self._byte_token_ids[b] for b in symbol.encode("utf-8")]
+        if self._unk_token_id is None:  # no byte fallback and no <unk>: nothing can stand for it
+            raise ValueError(f"can't tokenize {symbol!r}: no vocab piece, byte token or <unk>")
+        return [self._unk_token_id]  # SentencePiece without byte fallback does the same
 
     def _split_on_control_tokens(self, text: str) -> list[str]:
         pieces = self._control_tokens.split(text)

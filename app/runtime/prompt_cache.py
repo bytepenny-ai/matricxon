@@ -72,6 +72,7 @@ class PromptCache(PromptCacheChats):
         self._tick = 0
         self.reused_tokens = 0
         self.miss_reason = ""
+        self.prefill_steps: list = []
 
     @property
     def slot_count(self) -> int:
@@ -97,10 +98,13 @@ class PromptCache(PromptCacheChats):
         dtype: torch.dtype,
         reusable: bool,
         tag: str = "",
+        block_min: int = 0,
     ) -> tuple[object, int]:
-        """(cache, n): a cache already holding `prompt_ids[:n]`, so prefill starts at n."""
+        """(cache, n): a cache already holding `prompt_ids[:n]`, so prefill starts at n. With
+        `block_min` (block reuse, block_reuse.py) `prefill_steps` may list copied parts after n."""
         key = (num_ctx, dtype)
         self.reused_tokens = 0
+        self.prefill_steps = []
         self.miss_reason = "" if reusable else "the prompt contains images (never reused)"
         if reusable:
             if self._context_shift and tag:
@@ -113,6 +117,12 @@ class PromptCache(PromptCacheChats):
                     if self._context_shift and tag:
                         self._shift_trimmed_chat(architecture, prompt_ids, key, tag)
                     best, common, n = self._best_slot(prompt_ids, key)
+            if block_min > 0:
+                assembled = self._assemble_blocks(
+                    architecture, prompt_ids, key, best, n, tag, block_min
+                )
+                if assembled is not None:
+                    return assembled
             if best is not None:
                 self.reused_tokens = n
                 slot = self._take(best, common, n, num_ctx, tag)
