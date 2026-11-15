@@ -24,7 +24,7 @@ from app.models.worker import ModelWorker
 from app.runtime.batch_decode import BatchDecoder
 from app.runtime.cache_store import PersistentCacheStore
 from app.runtime.cache_tier import ModelCacheTier
-from app.runtime.chat_stop_tokens import extra_eos_token_ids
+from app.runtime.chat_stop_tokens import extra_eos_token_ids, thinking_start_token_ids
 from app.runtime.chat_template import PromptBuilderFactory
 from app.runtime.compute_device import ComputeDevice
 from app.runtime.prompt_cache import PromptCache
@@ -215,6 +215,7 @@ class HandleBuilder:
                 loader.metadata.get("tokenizer.chat_template"), loader.metadata.architecture
             ),
             extra_eos_token_ids=extra_eos_token_ids(loader.metadata),
+            thinking_start_token_ids=thinking_start_token_ids(loader.metadata),
             prompt_cache=PromptCache(
                 self._settings.prompt_cache_slots,
                 self.cache_budget_bytes(on_gpu, free_before_load, real_bytes_needed),

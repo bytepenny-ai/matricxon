@@ -22,6 +22,8 @@ class SamplingConfig:
     min_p: float = 0.0
     presence_penalty: float = 0.0
     frequency_penalty: float = 0.0
+    # Never picked (Sampler): the reasoning-opening tokens when a request turns thinking off.
+    banned_token_ids: frozenset[int] = frozenset()
 
 
 class TokenConstraint(Protocol):

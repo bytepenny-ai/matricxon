@@ -71,7 +71,8 @@ class ChatRequest(BaseModel):
     options: ChatOptions = ChatOptions()
     stream: bool = True
     # Reasoning before the answer, Ollama's field: passed to the template as `enable_thinking`.
-    # None keeps the model's default (Qwen 3.5's: off).
+    # None keeps the model's default (Qwen 3.5's: off), and the model may still open a reasoning
+    # block itself. False also blocks the tokens that open one (chat_stop_tokens.py).
     think: bool | None = None
     keep_alive: int | None = None
     # Caller-chosen id for this reply (pAIring sends the message id). A later empty `keep_alive: 0`

@@ -40,3 +40,16 @@ def extra_eos_token_ids(metadata: GGUFMetadata) -> frozenset[int]:
     else:
         return frozenset()
     return frozenset(tokens.index(name) for name in names if name in tokens)
+
+
+# The tokens a reply opens its reasoning with: Qwen/DeepSeek's `<think>`, Gemma 4's `<|channel>`
+# (thinking_splitter.MARKERS). Blocked while sampling when a request turns thinking off
+# (ChatRequest.think False): a small model sometimes opened one anyway, then reasoned for
+# minutes the client never saw.
+THINKING_START_TOKENS = ("<think>", "<|channel>")
+
+
+def thinking_start_token_ids(metadata: GGUFMetadata) -> frozenset[int]:
+    """This model's ids of THINKING_START_TOKENS, when its vocabulary has them as single tokens."""
+    tokens: list[str] = metadata.get("tokenizer.ggml.tokens") or []
+    return frozenset(tokens.index(name) for name in THINKING_START_TOKENS if name in tokens)

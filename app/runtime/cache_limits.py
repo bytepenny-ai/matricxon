@@ -53,13 +53,14 @@ class CacheLimits(CacheFilesBase):
                 self._remove(name, reason=reason if index == 0 else None)
 
     def forget(self, tag: str) -> int:
-        """Deletes every stored file of the chat `tag` (and refuses its later spills); returns how
-        many files went."""
+        """Deletes every stored file of the chat `tag` and refuses later copies of what it held
+        until now; a reply after this (a reset channel goes on) is saved again. Returns how many
+        files went."""
         if not tag:
             return 0
         self._refresh()
         with self._lock:
-            self._forgotten.add(tag)
+            self._forgotten[tag] = time.monotonic()
             names = [n for n, e in self._index.items() if e.tag == tag]
         for name in names:
             self._remove(name, reason="its chat was deleted")

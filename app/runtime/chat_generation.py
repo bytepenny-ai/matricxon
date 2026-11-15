@@ -57,6 +57,10 @@ class ChatGeneration:
                 min_p=options.min_p,
                 presence_penalty=options.presence_penalty,
                 frequency_penalty=options.frequency_penalty,
+                # Thinking off means off: the template's switch alone is a hint a model may ignore.
+                banned_token_ids=(
+                    handle.thinking_start_token_ids if request.think is False else frozenset()
+                ),
             ),
             constraint=constraint,
         )

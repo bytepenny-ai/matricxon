@@ -52,9 +52,9 @@ class CacheFilesBase:
     _node_id: str
     _lock: threading.Lock
     _index: dict[str, StoredEntry]
-    _forgotten: set[str]
+    _forgotten: dict[str, float]
     _writer: ThreadPoolExecutor
-    _checkpoints: dict[tuple[str, str], tuple[SlotState, object]]  # (state, its slot)
+    _checkpoints: dict[tuple[str, str], tuple[SlotState, object, float]]  # (state, slot, changed)
     _spills_pending: int
     _last_scan: float
 

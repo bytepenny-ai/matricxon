@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 
 import torch
 
@@ -230,6 +231,7 @@ class PromptCache(PromptCacheChats):
         slot = self._slot_of(cache)
         if slot is not None:
             slot.in_use = False
+            slot.changed_at = time.monotonic()
             if slot.tag:  # older idle copies of this chat: this one is its newest state
                 self._slots = [s for s in self._slots if s is slot or s.tag != slot.tag or s.in_use]
             if self._tier is not None:

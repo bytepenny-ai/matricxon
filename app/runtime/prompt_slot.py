@@ -21,6 +21,9 @@ class CacheSlot:
     tag: str = ""
     saved_digest: int | None = None  # `digest()` of the state last copied to disk (cache_tier.py)
     saved_at: float = float("-inf")  # time.monotonic() of that copy
+    # time.monotonic() when a reply last finished on it: a chat deleted from the disk tier before
+    # then (a channel reset) has new content worth saving again (cache_writer.CacheWriter._refused).
+    changed_at: float = float("-inf")
     # What is on disk for this slot (cache_chain.PersistedChain), set by the store's writer thread
     # only: the next save adds just a piece after it. A fork or a restore starts without one.
     persisted: object | None = None

@@ -65,9 +65,10 @@ class PersistentCacheStore(CacheWriter, CacheReader, CacheLimits):
         self._rejected: set[str] = set()
         self._lock = threading.Lock()
         self._index: dict[str, StoredEntry] = {}
-        self._forgotten: set[str] = set()
+        self._forgotten: dict[str, float] = {}  # chat tag -> time.monotonic() of its forget()
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="cache-spill")
-        self._checkpoints: dict[tuple[str, str], SlotState] = {}  # newest copy waiting per chat
+        # The newest copy waiting per chat: (state, its slot, when the slot last changed).
+        self._checkpoints: dict[tuple[str, str], tuple[SlotState, object, float]] = {}
         self._spills_pending = 0  # chats leaving RAM, not yet on disk
         self._dir.mkdir(parents=True, exist_ok=True)
         self._startup_scan(scan_budget_seconds)

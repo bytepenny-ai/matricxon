@@ -37,9 +37,10 @@ class CacheWriter(CacheFilesBase):
         records what was saved, so the next copy adds only a piece (cache_chain.py)."""
         if not (self.policy.enabled and self.policy.budget_bytes > 0):
             return
+        changed_at = slot.changed_at if slot is not None else time.monotonic()
         with self._lock:
             queued = (model_id, tag) in self._checkpoints
-            self._checkpoints[(model_id, tag)] = (state, slot)
+            self._checkpoints[(model_id, tag)] = (state, slot, changed_at)
         if not queued:
             self._writer.submit(self._write_checkpoint, model_id, tag)
 
@@ -48,10 +49,10 @@ class CacheWriter(CacheFilesBase):
             queued = self._checkpoints.pop((model_id, tag), None)
         if queued is None:
             return  # the chat left RAM meanwhile: its spill writes the newest state
-        state, slot = queued
+        state, slot, changed_at = queued
         try:
-            if tag not in self._forgotten:
-                self._save(model_id, state, tag, slot)
+            if not self._refused(tag, changed_at):
+                self._save(model_id, state, tag, slot, changed_at)
         except Exception:  # noqa: BLE001 - a failed copy only costs a later re-prefill
             self._lost_track(slot)
             logger.exception("saving a prompt cache copy failed")
@@ -74,8 +75,8 @@ class CacheWriter(CacheFilesBase):
     def _spill(self, model_id: str, slot: CacheSlot) -> None:
         try:
             state = SlotCodec.capture(slot)
-            if state is not None and slot.tag not in self._forgotten:
-                self._save(model_id, state, slot.tag, slot)
+            if state is not None and not self._refused(slot.tag, slot.changed_at):
+                self._save(model_id, state, slot.tag, slot, slot.changed_at)
         except Exception:  # noqa: BLE001 - a failed spill only costs a later re-prefill
             self._lost_track(slot)
             logger.exception("persisting a prompt cache failed")
@@ -83,7 +84,15 @@ class CacheWriter(CacheFilesBase):
             with self._lock:
                 self._spills_pending -= 1
 
-    def _save(self, model_id: str, state: SlotState, tag: str, slot: CacheSlot | None) -> None:
+    def _refused(self, tag: str, changed_at: float) -> bool:
+        """A copy of what the chat `tag` held before it was deleted (forget): never saved."""
+        with self._lock:
+            forgotten = self._forgotten.get(tag)
+        return forgotten is not None and changed_at <= forgotten
+
+    def _save(
+        self, model_id: str, state: SlotState, tag: str, slot: CacheSlot | None, changed_at: float
+    ) -> None:
         """Writes a full copy, or only a piece when the chat just grew since its last save on a
         chain that is still whole (SavePlan.decide; writer thread only)."""
         token_ids = state.tensors["token_ids"]
@@ -104,7 +113,7 @@ class CacheWriter(CacheFilesBase):
             if plan.full
             else SlotCodec.serialize_piece(state, plan.start)
         )
-        written = self._write(model_id, encoded, tag, plan)
+        written = self._write(model_id, encoded, tag, plan, changed_at)
         if slot is not None:
             slot.persisted = (
                 plan.after(saved, token_ids, state.num_ctx, state.dtype_name) if written else None
@@ -126,7 +135,12 @@ class CacheWriter(CacheFilesBase):
             slot.persisted = None
 
     def _write(
-        self, model_id: str, encoded: EncodedSlot, tag: str = "", plan: SavePlan | None = None
+        self,
+        model_id: str,
+        encoded: EncodedSlot,
+        tag: str = "",
+        plan: SavePlan | None = None,
+        changed_at: float = float("inf"),
     ) -> bool:
         """True when the file is on disk and kept (not too big, its chat not deleted meanwhile)."""
         plan = plan or SavePlan(True, uuid.uuid4().hex, 0, 0)
@@ -155,7 +169,8 @@ class CacheWriter(CacheFilesBase):
         entry.size = len(blob)
         with self._lock:
             self._index[name] = entry
-            gone = tag in self._forgotten
+            forgotten = self._forgotten.get(tag)
+            gone = forgotten is not None and changed_at <= forgotten
             superseded = SupersededCopies.find(name, entry, list(self._index.items()))
         if gone:
             self._remove(name, reason="its chat was deleted while it was being saved")

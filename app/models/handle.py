@@ -51,6 +51,9 @@ class ModelHandle:
     # time from this model's metadata; empty for anything not ChatML-shaped. Routers union it with
     # {tokenizer.eos_token_id} for ChatEngine's stop condition and to hide the closing token's text.
     extra_eos_token_ids: frozenset[int] = frozenset()
+    # The tokens that open a reasoning block (chat_stop_tokens.thinking_start_token_ids):
+    # blocked when a request turns thinking off.
+    thinking_start_token_ids: frozenset[int] = frozenset()
     # False for a helper (embedding, reranker, vision role): never counts toward max_loaded
     # (load_limit.py).
     counts_toward_limit: bool = True

@@ -122,6 +122,11 @@ class Sampler:
         self._top_k = TopKFilter(sampling.top_k)
         self._min_p = MinPFilter(sampling.min_p)
         self._top_p = TopPFilter(sampling.top_p)
+        self._banned = (
+            torch.tensor(sorted(sampling.banned_token_ids), dtype=torch.long)
+            if sampling.banned_token_ids
+            else None
+        )
         # The native/Numba sampler covers the original four options only; the rest run here.
         self._fused_ok = (
             constraint is None
@@ -138,6 +143,8 @@ class Sampler:
     def sample(self, logits: torch.Tensor, generated_ids: list[int]) -> int:
         stage_started = time.monotonic()
         logits = logits.to(torch.float32)
+        if self._banned is not None:  # before every path, the fused one included
+            logits = logits.index_fill(0, self._banned, float("-inf"))
         ops = FusedOps.active()
         if self._fused_ok and ops is not None and ops.can_sample(logits, self._sampling):
             u = float(torch.rand((), generator=self._generator))
