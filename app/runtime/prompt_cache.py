@@ -74,6 +74,7 @@ class PromptCache(PromptCacheChats):
         self.reused_tokens = 0
         self.miss_reason = ""
         self.prefill_steps: list = []
+        self.compacting = False  # set by acquire: the chat was trimmed (prompt_cache_chats.py)
 
     @property
     def slot_count(self) -> int:
@@ -106,6 +107,7 @@ class PromptCache(PromptCacheChats):
         key = (num_ctx, dtype)
         self.reused_tokens = 0
         self.prefill_steps = []
+        self.compacting = False
         self.miss_reason = "" if reusable else "the prompt contains images (never reused)"
         if reusable:
             if self._context_shift and tag:

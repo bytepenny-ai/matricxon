@@ -69,6 +69,7 @@ class PromptCacheChats:
                 best = (gap[0] + gap[2], slot, gap)
         if best is None:
             return
+        self.compacting = True  # cut back below, or re-read when the model can't shift
         _, slot, (keep, dropped, run) = best
         rotations = architecture.context_shift_rotations(dropped)
         if rotations is None:

@@ -102,7 +102,7 @@ def test_a_trimmed_chat_reuses_its_cache_and_the_first_layer_matches_a_cold_read
     with caplog.at_level(logging.INFO):
         warm = _run(model, cache, trimmed)
 
-    assert "context shift: dropped" in caplog.text
+    assert "context shift: dropped" in caplog.text and cache.compacting  # the reply says so
     assert cache.reused_tokens >= len(SYSTEM) + len(MID)
     assert len(warm) > 0
     cold = PromptCache(4)
@@ -121,7 +121,7 @@ def test_switching_it_off_reads_the_whole_chat_again(model, caplog):
     with caplog.at_level(logging.INFO):
         _run(model, cache, SYSTEM + MID + TAIL1 + [9, 8, 7])
 
-    assert "context shift" not in caplog.text
+    assert "context shift" not in caplog.text and not cache.compacting
     assert cache.reused_tokens <= len(SYSTEM)
 
 

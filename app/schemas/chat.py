@@ -119,6 +119,9 @@ class ChatReadProgress(BaseModel):
     read: int
     total: int
     layer: int | None = None
+    # True while the cache is compacted: the chat outgrew the context, its oldest messages were
+    # trimmed, and the cache is cut back or the chat re-read (says why this wait is longer).
+    compacting: bool | None = None
 
 
 class ChatProgressChunk(BaseModel):

@@ -51,3 +51,27 @@ def test_progress_is_reported_while_reading_and_only_when_it_moved() -> None:
 def test_the_last_chunk_says_how_much_came_from_the_cache() -> None:
     chunk = ChatDoneChunk(prompt_eval_count=900, prompt_cached_count=100).to_ndjson_dict()
     assert chunk["prompt_cached_count"] == 100
+
+
+def test_a_compacting_cache_is_reported_at_once() -> None:
+    async def run() -> list[object]:
+        results: asyncio.Queue[object] = asyncio.Queue()
+        live = FakeLive()
+        live.compacting = True  # type: ignore[attr-defined]
+        queue = ReadProgressQueue(results, live, total=900, interval=60.0)
+
+        async def reader() -> None:
+            await asyncio.sleep(1.3)  # past COMPACTING_SECONDS, far before the 60 s interval
+            await results.put(None)
+
+        task = asyncio.create_task(reader())
+        seen = []
+        while (item := await queue.get()) is not None:
+            seen.append(item)
+        await task
+        return seen
+
+    seen = asyncio.run(run())
+    assert [item["prompt_progress"] for item in seen] == [
+        {"cached": 100, "read": 0, "total": 900, "compacting": True}
+    ]

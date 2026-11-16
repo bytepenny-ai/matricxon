@@ -24,6 +24,7 @@ class LiveRequest:
         self.load_seconds: float | None = None
         self.prompt_tokens = 0
         self.reused_tokens = 0
+        self.compacting = False  # the cache is being compacted (a trimmed chat)
         self.prefilled_tokens = 0
         self.generated_tokens = 0
         self.prefill_started: float | None = None
@@ -46,8 +47,9 @@ class LiveRequest:
         self.prompt_tokens = prompt_tokens
         self.phase = "queued"
 
-    def prefill(self, reused: int, profiler: StageProfiler) -> None:
+    def prefill(self, reused: int, profiler: StageProfiler, compacting: bool = False) -> None:
         self.reused_tokens = reused
+        self.compacting = compacting
         self.prefill_started = self._clock()
         self._profiler = profiler
         self._profile_start = profiler.snapshot()

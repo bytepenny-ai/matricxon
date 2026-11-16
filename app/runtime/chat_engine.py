@@ -177,7 +177,7 @@ class ChatEngine:
         materialize = getattr(self._architecture, "_ensure_materialized", None)
         if materialize is not None:
             materialize(stop_check)
-        self._live.prefill(from_cache, self._profiler())
+        self._live.prefill(from_cache, self._profiler(), self._prompt_cache.compacting)
         try:
             forward_started = time.monotonic()
             single_piece = (
